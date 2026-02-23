@@ -5,9 +5,10 @@ import { prisma } from "@/lib/prisma";
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const { id } = await params;
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,7 +38,7 @@ export async function PATCH(
 
     // 2. Update role in Prisma (public schema)
     const updatedUser = await prisma.user.update({
-      where: { id: params.id },
+      where: { id },
       data: { role: role as any },
     });
 
@@ -57,7 +58,7 @@ export async function PATCH(
     );
 
     const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
-      params.id,
+      id,
       { user_metadata: { role: role } },
     );
 
