@@ -110,6 +110,36 @@ export async function POST(request: Request) {
       );
     }
 
+    // BR-RULE-01: Check for overlapping bookings for the same motorcycle
+    const requestedTime = new Date(parsed.data.booking_time);
+    const twoHoursBefore = new Date(
+      requestedTime.getTime() - 2 * 60 * 60 * 1000,
+    );
+    const twoHoursAfter = new Date(
+      requestedTime.getTime() + 2 * 60 * 60 * 1000,
+    );
+
+    const existingBooking = await prisma.booking.findFirst({
+      where: {
+        motorcycle_id: parsed.data.motorcycle_id,
+        status: { in: ["pending", "confirmed"] },
+        booking_time: {
+          gt: twoHoursBefore,
+          lt: twoHoursAfter,
+        },
+      },
+    });
+
+    if (existingBooking) {
+      return NextResponse.json(
+        {
+          message:
+            "รถคันนี้มีการจองในช่วงเวลาใกล้เคียงกันแล้ว (ห่างกันอย่างน้อย 2 ชม.)",
+        },
+        { status: 409 },
+      );
+    }
+
     const booking = await prisma.booking.create({
       data: {
         customer_id: customer.id,

@@ -1,7 +1,8 @@
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createAdminClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { registerSchema } from "@/lib/validations";
+import { UserRole } from "@prisma/client";
 
 export async function POST(request: Request) {
   try {
@@ -15,53 +16,60 @@ export async function POST(request: Request) {
       );
     }
 
-    const { email, password, full_name, phone } = parsed.data;
-    const cookieStore = await cookies();
+    const { email, password, full_name, phone, inviteCode } = parsed.data;
 
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options),
-            );
-          },
-        },
-      },
-    );
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name,
-          phone,
-          role: "customer",
-        },
-      },
-    });
-
-    if (error) {
-      let message = "ไม่สามารถสมัครสมาชิกได้";
-      if (error.message.includes("already registered")) {
-        message = "อีเมลนี้ถูกใช้งานแล้ว";
-      } else if (error.message.includes("password")) {
-        message = "รหัสผ่านไม่ตรงตามเงื่อนไข";
-      }
-      return NextResponse.json({ message }, { status: 400 });
+    // Determine role based on invite code
+    let role = "customer";
+    if (inviteCode === "MTD-STAFF") {
+      role = "staff";
+    } else if (inviteCode === "MTD-ADMIN") {
+      role = "admin";
     }
 
-    return NextResponse.json({
-      message: "สมัครสมาชิกสำเร็จ กรุณายืนยันอีเมล",
-      user: data.user,
+    // Use Admin Client to bypass email confirmation rate limits during testing
+    const supabase = await createAdminClient();
+
+    // 1. Create User via Admin API (Auto-confirms the email)
+    const { data: authData, error: authError } =
+      await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true, // Auto-confirm email to bypass rate limits
+        user_metadata: {
+          full_name,
+          phone,
+          role,
+        },
+      });
+
+    if (authError) {
+      console.error("Supabase Admin createUser error:", authError);
+      return NextResponse.json({ message: authError.message }, { status: 400 });
+    }
+
+    const newUser = authData.user!;
+
+    // 2. Sync to Prisma Database (Manual sync because it's an admin creation)
+    const dbUser = await prisma.user.create({
+      data: {
+        id: newUser.id,
+        email: newUser.email!,
+        role: role as UserRole,
+        customer: {
+          create: {
+            full_name,
+            phone,
+          },
+        },
+      },
     });
-  } catch {
+
+    return NextResponse.json({
+      message: "สมัครสมาชิกสำเร็จและเข้าใช้งานได้ทันที",
+      user: newUser,
+    });
+  } catch (err) {
+    console.error("Registration error:", err);
     return NextResponse.json(
       { message: "เกิดข้อผิดพลาด กรุณาลองใหม่" },
       { status: 500 },

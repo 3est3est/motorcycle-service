@@ -81,6 +81,25 @@ export default function PaymentsPage() {
       : Number(amount);
   };
 
+  const handleProcessPayment = async (id: string) => {
+    if (!confirm("ยืนยันการชำระเงินสำหรับบิลนี้?")) return;
+    try {
+      const res = await fetch(`/api/payments/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "success" }),
+      });
+      if (res.ok) {
+        alert("ชำระเงินสำเร็จแล้ว! ได้รับคะแนนสะสมเรียบร้อย");
+        fetchPayments(); // Refresh list
+      } else {
+        const data = await res.json();
+        alert(data.message || "เกิดข้อผิดพลาด");
+      }
+    } catch (err) {
+      alert("ไม่สามารถดำเนินการได้");
+    }
+  };
+
   return (
     <div className="animate-fade-in">
       <TopBar
@@ -196,7 +215,7 @@ export default function PaymentsPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between sm:justify-end gap-6 sm:gap-4 sm:bg-muted/30 sm:px-4 sm:py-2 rounded-xl">
+                      <div className="flex flex-col sm:flex-row items-center justify-between sm:justify-end gap-6 sm:gap-4 sm:bg-muted/30 sm:px-4 sm:py-2 rounded-xl">
                         <div className="text-left sm:text-right">
                           <p className="text-xs text-muted-foreground uppercase font-medium">
                             ยอดเงินรวม
@@ -205,7 +224,20 @@ export default function PaymentsPage() {
                             {formatCurrency(amountValue)}
                           </p>
                         </div>
-                        <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                        {payment.status === "pending" ? (
+                          <Button
+                            size="sm"
+                            className="w-full sm:w-auto rounded-xl font-bold px-6 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 transition-all active:scale-95"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleProcessPayment(payment.id);
+                            }}
+                          >
+                            ชำระเงิน
+                          </Button>
+                        ) : (
+                          <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                        )}
                       </div>
                     </div>
                   </CardContent>

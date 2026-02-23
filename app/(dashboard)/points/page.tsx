@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 interface PointTransaction {
   id: string;
@@ -78,6 +80,35 @@ export default function PointsPage() {
       bg: "bg-primary/10",
       icon: History,
     },
+  };
+
+  const handleRedeem = async (points: number, title: string) => {
+    if (data.total_points < points) {
+      alert("คะแนนของคุณไม่เพียงพอ");
+      return;
+    }
+
+    if (!confirm(`ยืนยันการใช้ ${points} แต้ม เพื่อแลกรับสิทธิ์ "${title}"?`))
+      return;
+
+    try {
+      const res = await fetch("/api/points/redeem", {
+        method: "POST",
+        body: JSON.stringify({ points_to_redeem: points, description: title }),
+      });
+
+      if (res.ok) {
+        alert(
+          "แลกสิทธิ์สำเร็จ! กรุณานำรหัสที่ได้รับแจ้งเจ้าหน้าที่ (จำลองระบบรหัส)",
+        );
+        window.location.reload(); // Simple refresh for now
+      } else {
+        const err = await res.json();
+        alert(err.message || "เกิดข้อผิดพลาด");
+      }
+    } catch (err) {
+      alert("ทำรายการไม่สำเร็จ");
+    }
   };
 
   if (loading) {
@@ -214,34 +245,45 @@ export default function PointsPage() {
               {[
                 { title: "ฟรีค่าแรงเปลี่ยนถ่ายน้ำมันเครื่อง", cost: 500 },
                 { title: "ส่วนลดอะไหล่ 10%", cost: 1200 },
-              ].map((reward) => (
-                <div
-                  key={reward.title}
-                  className="p-4 rounded-2xl border border-border/50 bg-muted/20 opacity-80 cursor-not-allowed group"
-                >
-                  <p className="text-sm font-bold text-foreground mb-2">
-                    {reward.title}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Star className="w-3 h-3 text-warning fill-warning" />
-                      {reward.cost} แต้ม
+              ].map((reward) => {
+                const canRedeem = data.total_points >= reward.cost;
+                return (
+                  <div
+                    key={reward.title}
+                    className={cn(
+                      "p-4 rounded-2xl border transition-all",
+                      canRedeem
+                        ? "border-primary/20 bg-primary/5 hover:border-primary/40"
+                        : "border-border/50 bg-muted/20 opacity-80",
+                    )}
+                  >
+                    <p className="text-sm font-bold text-foreground mb-2">
+                      {reward.title}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Star className="w-3 h-3 text-warning fill-warning" />
+                        {reward.cost} แต้ม
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={canRedeem ? "default" : "secondary"}
+                        disabled={!canRedeem}
+                        className="h-7 text-[10px] uppercase font-bold"
+                        onClick={() => handleRedeem(reward.cost, reward.title)}
+                      >
+                        {canRedeem ? "แลกสิทธิ์" : "🔒 Locked"}
+                      </Button>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] uppercase font-bold tracking-wider"
-                    >
-                      🔒 Locked
-                    </Badge>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10 flex items-center gap-3">
                 <div className="p-2 rounded-full bg-primary/10">
                   <AlertCircle className="w-4 h-4 text-primary" />
                 </div>
                 <p className="text-[10px] text-primary/80 leading-relaxed font-medium">
-                  สะสมแต้มจากการชำระค่าบริการ ทุกๆ 100 บาท รับ 10 แต้ม
+                  สะสมแต้มจากการชำระค่าบริการ ทุกๆ 10 บาท รับ 1 แต้ม
                   เพื่อแลกรับสิทธิพิเศษมากมาย
                 </p>
               </div>

@@ -18,8 +18,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { logoutAction } from "@/lib/actions/auth";
 
 type UserRole = "customer" | "staff" | "admin";
 
@@ -184,25 +185,35 @@ function SidebarContent({
   onItemClick,
   onToggleCollapse,
 }: any) {
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
-  const handleLogout = async () => {
-    if (isLoggingOut) return;
-    setIsLoggingOut(true);
-
-    // Safety timeout: forced redirect if API takes too long
-    const timeoutId = setTimeout(() => {
-      window.location.replace("/login");
-    }, 3000);
+  const handleLogout = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isPending) return;
 
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
-      clearTimeout(timeoutId);
+      // 1. Clear all client-side storage
+      localStorage.clear();
+      sessionStorage.clear();
 
-      // Delay slightly for session processing
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      window.location.replace("/login");
+      // Clear cookies client-side
+      document.cookie.split(";").forEach((c) => {
+        document.cookie = c
+          .replace(/^ +/, "")
+          .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+      });
+
+      // 2. Clear server-side session using Server Action
+      startTransition(async () => {
+        try {
+          await logoutAction();
+        } catch (err) {
+          // Even if server action fails (e.g. redirect error), force a hard location change
+          window.location.replace("/login");
+        }
+      });
     } catch (err) {
+      console.error("Logout error:", err);
       window.location.replace("/login");
     }
   };
@@ -211,7 +222,7 @@ function SidebarContent({
     <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground border-r border-sidebar-border/50">
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-6 border-b border-sidebar-border/50">
-        <div className="flex-shrink-0 w-10 h-10 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20 ring-1 ring-white/10">
+        <div className="shrink-0 w-10 h-10 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20 ring-1 ring-white/10">
           <Bike className="w-6 h-6 text-white" />
         </div>
         {!collapsed && (
@@ -247,7 +258,7 @@ function SidebarContent({
             collapsed && "justify-center p-1 bg-transparent border-none",
           )}
         >
-          <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-linear-to-tr from-primary/40 to-primary/10 flex items-center justify-center ring-1 ring-sidebar-border/20 overflow-hidden">
+          <div className="shrink-0 w-10 h-10 rounded-xl bg-linear-to-tr from-primary/40 to-primary/10 flex items-center justify-center ring-1 ring-sidebar-border/20 overflow-hidden">
             <span className="text-sm font-black text-sidebar-foreground">
               {userName?.[0]?.toUpperCase() ?? "U"}
             </span>
@@ -287,7 +298,7 @@ function SidebarContent({
                 >
                   <Icon
                     className={cn(
-                      "w-5 h-5 flex-shrink-0 transition-transform",
+                      "w-5 h-5 shrink-0 transition-transform",
                       isActive && "stroke-[2.5]",
                     )}
                   />
@@ -309,21 +320,22 @@ function SidebarContent({
         )}
       >
         <button
+          type="button"
           onClick={handleLogout}
-          disabled={isLoggingOut}
+          disabled={isPending}
           className={cn(
             "btn btn-ghost w-full justify-start gap-4 rounded-2xl normal-case hover:bg-rose-500/10 hover:text-rose-500 transition-all group",
             collapsed &&
               "btn-square p-0 h-10 w-10 min-h-0 mx-auto justify-center",
-            isLoggingOut && "loading",
+            isPending && "loading",
           )}
         >
-          {!isLoggingOut && (
-            <LogOut className="w-5 h-5 flex-shrink-0 group-hover:-translate-x-1 transition-transform" />
+          {!isPending && (
+            <LogOut className="w-5 h-5 shrink-0 group-hover:-translate-x-1 transition-transform" />
           )}
           {!collapsed && (
             <span className="text-sm font-bold tracking-tight">
-              {isLoggingOut ? "กำลังออก..." : "ออกจากระบบ"}
+              {isPending ? "กำลังออก..." : "ออกจากระบบ"}
             </span>
           )}
         </button>

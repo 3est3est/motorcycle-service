@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,18 +18,15 @@ import {
   Users,
   Package,
   Hammer,
+  Loader2,
+  DollarSign,
 } from "lucide-react";
 import Link from "next/link";
-import type { Metadata } from "next";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
-
-export const metadata: Metadata = {
-  title: "แดชบอร์ด",
-};
+import { useQuery } from "@tanstack/react-query";
+import { RepairStatusModal } from "./repair-status-modal";
+import { cn, formatCurrency } from "@/lib/utils";
 
 const bookingStatusConfig = {
   pending: { label: "รอยืนยัน", variant: "pending" as const, icon: Clock },
@@ -47,126 +47,55 @@ const bookingStatusConfig = {
   },
 };
 
-export default async function DashboardPage() {
-  const cookieStore = await cookies();
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options),
-          );
-        },
-      },
+const statusConfig: Record<string, { label: string; variant: any; icon: any }> =
+  {
+    created: { label: "รอซ่อม/รอยืนยันราคา", variant: "warning", icon: Clock },
+    in_progress: {
+      label: "กำลังดำเนินการซ่อม",
+      variant: "confirmed",
+      icon: Wrench,
     },
-  );
-
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  const userRole = authUser?.user_metadata?.role || "customer";
-  const isStaff = userRole === "admin" || userRole === "staff";
-
-  // Data for different roles
-  let customerName = authUser?.user_metadata?.full_name ?? "ผู้ใช้งาน";
-  let stats = {
-    confirmedBookings: 0,
-    activeRepairs: 0,
-    inventory: 0,
-    loyaltyPoints: 0,
-    pendingPayments: 0,
+    completed: {
+      label: "ซ่อมเสร็จสิ้น",
+      variant: "completed",
+      icon: CheckCircle2,
+    },
+    delivered: { label: "ส่งมอบรถแล้ว", variant: "outline", icon: Package },
   };
 
-  let listData: any[] = [];
+export default function DashboardPage() {
+  const [selectedRepairId, setSelectedRepairId] = useState<string | null>(null);
 
-  if (authUser) {
-    try {
-      if (isStaff) {
-        const [pendingBookings, activeRepairs, lowStockParts] =
-          await Promise.all([
-            prisma.booking.count({ where: { status: "pending" } }),
-            prisma.repairJob.count({ where: { status: "in_progress" } }),
-            prisma.part.count({ where: { stock_qty: { lt: 5 } } }),
-          ]);
+  const { data, isLoading } = useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: async () => {
+      const res = await fetch("/api/dashboard/stats");
+      if (!res.ok) throw new Error("Failed to fetch dashboard stats");
+      return res.json();
+    },
+    refetchInterval: 10000,
+  });
 
-        stats = {
-          confirmedBookings: pendingBookings,
-          activeRepairs: activeRepairs,
-          inventory: lowStockParts,
-          loyaltyPoints: 0,
-          pendingPayments: 0,
-        };
-
-        listData = await prisma.booking.findMany({
-          orderBy: { booking_time: "asc" },
-          take: 5,
-          include: { customer: true, motorcycle: true },
-          where: { status: "pending" },
-        });
-      } else {
-        const customer = await prisma.customer.findUnique({
-          where: { user_id: authUser.id },
-          include: {
-            loyalty_points: true,
-            bookings: {
-              orderBy: { booking_time: "desc" },
-              take: 5,
-              include: { motorcycle: true },
-            },
-          },
-        });
-
-        if (customer) {
-          customerName = customer.full_name;
-          const pendingPaymentsCount = await prisma.payment.count({
-            where: {
-              repair_job: { booking: { customer_id: customer.id } },
-              status: "pending",
-            },
-          });
-
-          stats = {
-            confirmedBookings: customer.bookings.filter(
-              (b) => b.status === "confirmed",
-            ).length,
-            activeRepairs: await prisma.repairJob.count({
-              where: {
-                booking: { customer_id: customer.id },
-                status: "in_progress",
-              },
-            }),
-            inventory: 0,
-            loyaltyPoints: customer.loyalty_points?.total_points ?? 0,
-            pendingPayments: pendingPaymentsCount,
-          };
-          listData = customer.bookings;
-        }
-      }
-    } catch (error) {
-      console.error("Dashboard data fetch error:", error);
-    }
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <p className="text-muted-foreground font-bold animate-pulse uppercase tracking-widest text-xs">
+          กำลังโหลดความก้าวหน้าของคุณ...
+        </p>
+      </div>
+    );
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("th-TH", {
-      style: "currency",
-      currency: "THB",
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
+  const { stats, listData, customerName, activeRepairs = [] } = data;
+  const isCustomer = !!data.activeRepairs;
+  const isStaff = !isCustomer;
 
   return (
     <div className="animate-fade-in space-y-8 pb-10">
       <TopBar
         title="แดชบอร์ด"
-        subtitle={`สวัสดีคุณ ${customerName} • ${userRole === "admin" ? "ผู้ดูแลระบบ" : userRole === "staff" ? "พนักงาน" : "ลูกค้า"}`}
+        subtitle={`สวัสดีคุณ ${customerName} • ${isStaff ? "พนักงาน" : "ลูกค้า"}`}
       />
 
       <div className="p-4 sm:p-10 space-y-14">
@@ -177,7 +106,7 @@ export default async function DashboardPage() {
             icon={Calendar}
             variant="primary"
             sub="เตรียมเข้ารับบริการ"
-            href={isStaff ? "/admin" : "/bookings"}
+            href={!isCustomer ? "/admin" : "/bookings"}
             className="accent-glow"
           />
           <MetricCard
@@ -185,129 +114,261 @@ export default async function DashboardPage() {
             value={stats.activeRepairs}
             icon={Hammer}
             variant="warning"
-            sub="ติดตามสถานะล่าสุด"
-            href={isStaff ? "/repair-jobs" : "#"}
-            className="accent-glow-wa"
+            sub={
+              isCustomer && stats.activeRepairs > 0
+                ? "มีงานซ่อมเคลื่อนไหว!"
+                : "ติดตามสถานะล่าสุด"
+            }
+            href={!isCustomer ? "/repair-jobs" : undefined}
+            onClick={() => {
+              if (isCustomer && activeRepairs.length > 0) {
+                setSelectedRepairId(activeRepairs[0].id);
+              }
+            }}
+            className={cn(
+              "accent-glow-wa",
+              isCustomer &&
+                stats.activeRepairs > 0 &&
+                "ring-2 ring-warning ring-offset-4 ring-offset-background",
+            )}
           />
           <MetricCard
             label="ยอดค้างชำระ"
-            value={isStaff ? stats.inventory : stats.pendingPayments}
-            icon={isStaff ? Package : CreditCard}
+            value={!isCustomer ? stats.inventory : stats.pendingPayments}
+            icon={!isCustomer ? Package : CreditCard}
             variant="danger"
-            sub={isStaff ? "อะไหล่สต็อกต่ำ" : "ใบแจ้งหนี้ใหม่"}
-            href={isStaff ? "/parts" : "/payments"}
+            sub={!isCustomer ? "อะไหล่สต็อกต่ำ" : "ใบแจ้งหนี้ใหม่"}
+            href={!isCustomer ? "/parts" : "/payments"}
             className="accent-glow"
           />
           <MetricCard
-            label={isStaff ? "สิทธิ์การใช้งาน" : "คะแนนสะสม"}
+            label={!isCustomer ? "รายรับรวม" : "คะแนนสะสม"}
             value={
-              isStaff
-                ? userRole === "admin"
-                  ? "Admin"
-                  : "Staff"
+              !isCustomer
+                ? formatCurrency(stats.loyaltyPoints)
                 : stats.loyaltyPoints
             }
-            icon={isStaff ? Users : Star}
+            icon={!isCustomer ? DollarSign : Star}
             variant="success"
-            sub={isStaff ? "การเข้าถึงระบบ" : "แต้มสะสมทั้งหมด"}
-            href={isStaff ? "/users" : "/points"}
+            sub={!isCustomer ? "จากยอดที่ชำระสำเร็จ" : "แต้มสะสมทั้งหมด"}
+            href={!isCustomer ? "/payments" : "/points"}
             className="accent-glow-su"
           />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Main Activity */}
-          <div className="lg:col-span-8 space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold flex items-center gap-2">
-                <Clock className="w-5 h-5 text-primary" />
-                {isStaff ? "รายการจองที่รอดำเนินการ" : "ประวัติการจองล่าสุด"}
-              </h3>
-              <Link href={isStaff ? "/admin" : "/bookings"}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-primary font-bold hover:bg-primary/5"
-                >
-                  ดูทั้งหมด <ChevronRight className="w-4 h-4 ml-1" />
-                </Button>
-              </Link>
-            </div>
-
-            <Card className="card-minimal overflow-hidden border-none shadow-none">
-              <CardContent className="p-0">
-                {listData.length === 0 ? (
-                  <div className="py-20 text-center flex flex-col items-center justify-center space-y-3 opacity-40">
-                    <Calendar className="w-16 h-16 stroke-[1.5]" />
-                    <p className="text-sm font-medium">
-                      ไม่มีรายการในรายการแสดงขณะนี้
-                    </p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border/30">
-                    {listData.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-5 flex items-center justify-between hover:bg-white/5 transition-colors group"
-                      >
-                        <div className="flex items-center gap-4 min-w-0">
-                          <div className="w-12 h-12 rounded-2xl bg-secondary flex items-center justify-center shrink-0 shadow-inner group-hover:scale-110 transition-transform">
-                            <Bike className="w-6 h-6 text-muted-foreground/70" />
+          <div className="lg:col-span-8 space-y-8">
+            {/* Active Repairs Section */}
+            {isCustomer && activeRepairs.length > 0 && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-black flex items-center gap-3 uppercase tracking-tight">
+                    <div className="w-2 h-8 bg-warning rounded-full" />
+                    รถที่อยู่ระหว่างดำเนินการ ({activeRepairs.length})
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {activeRepairs.map((rj: any) => (
+                    <Card
+                      key={rj.id}
+                      className="glass-card overflow-hidden border-none shadow-xl hover:shadow-2xl transition-all cursor-pointer group active:scale-[0.98]"
+                      onClick={() => setSelectedRepairId(rj.id)}
+                    >
+                      <CardContent className="p-0">
+                        <div className="p-6 space-y-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform overflow-hidden shadow-inner">
+                                {rj.booking?.motorcycle?.image_url ? (
+                                  <img
+                                    src={rj.booking.motorcycle.image_url}
+                                    alt="Bike"
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <Bike className="w-6 h-6" />
+                                )}
+                              </div>
+                              <div>
+                                <p className="font-black text-lg leading-tight tracking-tight">
+                                  {rj.booking.motorcycle.brand}{" "}
+                                  {rj.booking.motorcycle.model}
+                                </p>
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase mt-0.5 tracking-widest">
+                                  ทะเบียน {rj.booking.motorcycle.license_plate}
+                                </p>
+                              </div>
+                            </div>
+                            {!rj.customer_confirmed && rj.booking.estimate && (
+                              <Badge
+                                variant="warning"
+                                className="animate-pulse font-black text-[9px] uppercase px-2 py-0.5 rounded-lg shadow-sm shadow-warning/20"
+                              >
+                                รอยืนยันราคา
+                              </Badge>
+                            )}
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-bold text-base truncate">
-                              {isStaff
-                                ? item.customer?.full_name
-                                : `${item.motorcycle?.brand} ${item.motorcycle?.model}`}
-                            </p>
-                            <p className="text-xs text-muted-foreground font-medium flex items-center gap-2">
-                              {format(
-                                new Date(item.booking_time),
-                                "d MMM yyyy",
-                                { locale: th },
-                              )}
-                              <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-                              {format(new Date(item.booking_time), "HH:mm น.", {
-                                locale: th,
-                              })}
-                            </p>
+
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-end">
+                              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground opacity-50">
+                                สถานะการซ่อม
+                              </span>
+                              <span className="text-sm font-black text-primary">
+                                {rj.progress}%
+                              </span>
+                            </div>
+                            <div className="h-2 w-full bg-secondary/30 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-primary rounded-full transition-all duration-1000 ease-out"
+                                style={{ width: `${rj.progress}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2 border-t border-border/10">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase">
+                                {statusConfig[rj.status]?.label || rj.status}
+                              </span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-[10px] font-black uppercase text-primary hover:bg-primary/5 p-0"
+                            >
+                              รายละเอียด{" "}
+                              <ChevronRight className="w-3 h-3 ml-0.5" />
+                            </Button>
                           </div>
                         </div>
-                        <Badge
-                          className={`px-4 py-1 rounded-xl font-bold uppercase tracking-wider text-[10px] ${
-                            bookingStatusConfig[
-                              item.status as keyof typeof bookingStatusConfig
-                            ]?.variant === "pending"
-                              ? "badge-pending"
-                              : bookingStatusConfig[
-                                    item.status as keyof typeof bookingStatusConfig
-                                  ]?.variant === "confirmed"
-                                ? "badge-confirmed"
-                                : bookingStatusConfig[
-                                      item.status as keyof typeof bookingStatusConfig
-                                    ]?.variant === "completed"
-                                  ? "badge-completed"
-                                  : "badge-cancelled"
-                          }`}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-primary" />
+                  {!isCustomer
+                    ? "รายการจองที่รอดำเนินการ"
+                    : "ประวัติการจองล่าสุด"}
+                </h3>
+                <Link href={!isCustomer ? "/admin" : "/bookings"}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-primary font-bold hover:bg-primary/5"
+                  >
+                    ดูทั้งหมด <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </Link>
+              </div>
+
+              <Card className="card-minimal overflow-hidden border-none shadow-none">
+                <CardContent className="p-0">
+                  {listData.length === 0 ? (
+                    <div className="py-20 text-center flex flex-col items-center justify-center space-y-3 opacity-40">
+                      <Calendar className="w-16 h-16 stroke-[1.5]" />
+                      <p className="text-sm font-medium">
+                        ไม่มีรายการในรายการแสดงขณะนี้
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border/30">
+                      {listData.map((item: any) => (
+                        <div
+                          key={item.id}
+                          className="p-5 flex items-center justify-between hover:bg-white/5 transition-colors group"
                         >
-                          {bookingStatusConfig[
-                            item.status as keyof typeof bookingStatusConfig
-                          ]?.label || item.status}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                          <div className="flex items-center gap-4 min-w-0">
+                            <div className="w-12 h-12 rounded-2xl bg-secondary flex items-center justify-center shrink-0 shadow-inner group-hover:scale-110 transition-transform overflow-hidden">
+                              {item.motorcycle?.image_url ? (
+                                <img
+                                  src={item.motorcycle.image_url}
+                                  alt="Motorcycle"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <Bike className="w-6 h-6 text-muted-foreground/70" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-base truncate">
+                                {!isCustomer
+                                  ? item.customer?.full_name
+                                  : `${item.motorcycle?.brand} ${item.motorcycle?.model}`}
+                              </p>
+                              <p className="text-xs text-muted-foreground font-medium flex items-center gap-2">
+                                {format(
+                                  new Date(item.booking_time),
+                                  "d MMM yyyy",
+                                  { locale: th },
+                                )}
+                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                                {format(
+                                  new Date(item.booking_time),
+                                  "HH:mm น.",
+                                  {
+                                    locale: th,
+                                  },
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {isCustomer && item.repair && (
+                              <Button
+                                size="sm"
+                                variant="warning"
+                                className="h-8 rounded-lg text-[10px] font-black uppercase px-3 shadow-md shadow-warning/20 border-none"
+                                onClick={() =>
+                                  setSelectedRepairId(item.repair.id)
+                                }
+                              >
+                                ติดตามสถานะ
+                              </Button>
+                            )}
+                            <Badge
+                              className={`px-4 py-1 rounded-xl font-bold uppercase tracking-wider text-[10px] ${
+                                bookingStatusConfig[
+                                  item.status as keyof typeof bookingStatusConfig
+                                ]?.variant === "pending"
+                                  ? "badge-pending"
+                                  : bookingStatusConfig[
+                                        item.status as keyof typeof bookingStatusConfig
+                                      ]?.variant === "confirmed"
+                                    ? "badge-confirmed"
+                                    : bookingStatusConfig[
+                                          item.status as keyof typeof bookingStatusConfig
+                                        ]?.variant === "completed"
+                                      ? "badge-completed"
+                                      : "badge-cancelled"
+                              }`}
+                            >
+                              {bookingStatusConfig[
+                                item.status as keyof typeof bookingStatusConfig
+                              ]?.label || item.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
 
-          {/* Sidebar Tools */}
           <div className="lg:col-span-4 space-y-8">
             <div className="space-y-4">
               <h3 className="text-lg font-bold">เข้าถึงด่วน</h3>
               <div className="grid grid-cols-2 gap-4">
-                {isStaff ? (
+                {!isCustomer ? (
                   <>
                     <ActionButton
                       label="รับคิวจอง"
@@ -373,6 +434,11 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
+
+      <RepairStatusModal
+        repairId={selectedRepairId}
+        onClose={() => setSelectedRepairId(null)}
+      />
     </div>
   );
 }
@@ -383,6 +449,7 @@ function MetricCard({
   icon: Icon,
   sub,
   href,
+  onClick,
   variant,
   className,
 }: any) {
@@ -393,33 +460,45 @@ function MetricCard({
     success: "text-emerald-600 bg-emerald-500/10 border-emerald-500/20",
   };
 
-  const glowClass = className || "";
+  const Content = (
+    <div className="stat px-8 py-8 relative z-10">
+      <div
+        className={`stat-figure p-4 rounded-3xl ${colors[variant as keyof typeof colors]} transition-all duration-700 group-hover:scale-110 group-hover:rotate-3 group-hover:bg-opacity-20`}
+      >
+        <Icon className="w-10 h-10 stroke-[1.25]" />
+      </div>
+      <div className="stat-desc font-black text-[11px] uppercase tracking-[0.3em] text-muted-foreground/50 mb-3">
+        {label}
+      </div>
+      <div className="stat-value text-4xl font-black tracking-tight flex items-baseline gap-1">
+        {value}
+        <span className="text-xs font-bold text-muted-foreground ml-1">
+          รายการ
+        </span>
+      </div>
+      <div className="stat-desc mt-4 flex items-center gap-1.5 opacity-60 font-bold text-xs">
+        {sub}{" "}
+        <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1.5 transition-all" />
+      </div>
+    </div>
+  );
+
+  const cardClasses = cn(
+    "glass-card border border-border/10 bg-card/10 backdrop-blur-xl p-0.5 rounded-[2rem] overflow-hidden group transition-liquid active-bounce cursor-pointer",
+    className,
+  );
+
+  if (onClick) {
+    return (
+      <div onClick={onClick} className={cardClasses}>
+        {Content}
+      </div>
+    );
+  }
 
   return (
-    <Link
-      href={href}
-      className={`glass-card border border-border/10 bg-card/10 backdrop-blur-xl p-0.5 rounded-[2rem] overflow-hidden group transition-liquid active-bounce ${glowClass}`}
-    >
-      <div className="stat px-8 py-8 relative z-10">
-        <div
-          className={`stat-figure p-4 rounded-3xl ${colors[variant as keyof typeof colors]} transition-all duration-700 group-hover:scale-110 group-hover:rotate-3 group-hover:bg-opacity-20`}
-        >
-          <Icon className="w-10 h-10 stroke-[1.25]" />
-        </div>
-        <div className="stat-desc font-black text-[11px] uppercase tracking-[0.3em] text-muted-foreground/50 mb-3">
-          {label}
-        </div>
-        <div className="stat-value text-4xl font-black tracking-tight flex items-baseline gap-1">
-          {value}
-          <span className="text-xs font-bold text-muted-foreground ml-1">
-            รายการ
-          </span>
-        </div>
-        <div className="stat-desc mt-4 flex items-center gap-1.5 opacity-60 font-bold text-xs">
-          {sub}{" "}
-          <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1.5 transition-all" />
-        </div>
-      </div>
+    <Link href={href || "#"} className={cardClasses}>
+      {Content}
     </Link>
   );
 }

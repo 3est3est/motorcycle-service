@@ -21,6 +21,7 @@ export const viewport = {
 };
 
 import { cookies } from "next/headers";
+import { QueryProvider } from "@/components/providers/query-provider";
 
 export default async function RootLayout({
   children,
@@ -32,7 +33,9 @@ export default async function RootLayout({
 
   return (
     <html lang="th" className={theme === "dark" ? "dark" : ""}>
-      <body className="antialiased min-h-screen bg-background">{children}</body>
+      <body className="antialiased min-h-screen bg-background">
+        <QueryProvider>{children}</QueryProvider>
+      </body>
     </html>
   );
 }

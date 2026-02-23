@@ -22,6 +22,8 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         success:
           "bg-success text-success-foreground shadow hover:bg-success/90 active:scale-95",
+        warning:
+          "bg-warning text-warning-foreground shadow hover:bg-warning/90 active:scale-95",
       },
       size: {
         default: "h-10 px-4 py-2 min-w-[44px] min-h-[44px]",
@@ -57,7 +59,11 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {...props}
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-        {children}
+        {!loading && children}
+        {loading && typeof children === "string" && (
+          <span className="ml-2">กำลังโหลด...</span>
+        )}
+        {loading && typeof children !== "string" && children}
       </button>
     );
   },

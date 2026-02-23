@@ -21,6 +21,7 @@ export const registerSchema = z
     phone: z
       .string()
       .regex(/^[0-9]{9,10}$/, "เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก"),
+    inviteCode: z.string().optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "รหัสผ่านไม่ตรงกัน",
@@ -32,7 +33,8 @@ export const motorcycleSchema = z.object({
   brand: z.string().min(1, "กรุณากรอกยี่ห้อรถ").max(255),
   model: z.string().min(1, "กรุณากรอกรุ่นรถ").max(255),
   license_plate: z.string().min(1, "กรุณากรอกทะเบียนรถ").max(20),
-  year: z.number().int().min(1900).max(2100).optional(),
+  year: z.number().int().min(1900).max(2600).optional(),
+  image_url: z.string().url().optional().or(z.literal("")),
 });
 
 // Booking
@@ -75,6 +77,7 @@ export const partSchema = z.object({
   description: z.string().max(500).optional(),
   price: z.number().min(0, "ราคาต้องไม่ติดลบ"),
   stock_qty: z.number().int().min(0, "จำนวนต้องไม่ติดลบ"),
+  image_url: z.string().url().optional().or(z.literal("")),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;

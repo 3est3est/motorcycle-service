@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { TopBar } from "@/components/layout/topbar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -19,76 +19,67 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
-import { formatCurrency } from "@/lib/utils";
+
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function AdminPage() {
-  const [data, setData] = useState<{
-    bookings: any[];
-    stats: {
-      pendingBookings: number;
-      activeRepairs: number;
-      totalPendingAmount: number;
-    };
-  }>({
-    bookings: [],
-    stats: {
-      pendingBookings: 0,
-      activeRepairs: 0,
-      totalPendingAmount: 0,
+  const queryClient = useQueryClient();
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // Fetch Bookings with TanStack Query
+  const { data: bookings = [], isLoading: isLoadingBookings } = useQuery({
+    queryKey: ["admin", "bookings"],
+    queryFn: async () => {
+      const res = await fetch("/api/staff/bookings");
+      if (!res.ok) throw new Error("Failed to fetch bookings");
+      return res.json();
     },
+    refetchInterval: 5000, // Real-time polling every 5 seconds
   });
-  const [loading, setLoading] = useState(true);
 
-  const fetchAdminData = async () => {
-    try {
-      // ดึงทั้งข้อมูลจองและข้อมูลงานสรุป
-      const [bookingsRes, repairsRes, paymentsRes] = await Promise.all([
-        fetch("/api/staff/bookings"),
-        fetch("/api/staff/repairs"),
-        fetch("/api/payments"), // ในอนาคตควรมี API สรุปยอดเงินรายเดือนแยกต่างหาก
-      ]);
+  // Fetch Repairs with TanStack Query
+  const { data: repairs = [], isLoading: isLoadingRepairs } = useQuery({
+    queryKey: ["admin", "repairs"],
+    queryFn: async () => {
+      const res = await fetch("/api/staff/repairs");
+      if (!res.ok) throw new Error("Failed to fetch repairs");
+      return res.json();
+    },
+    refetchInterval: 5000,
+  });
 
-      if (bookingsRes.ok && repairsRes.ok) {
-        const bookings = await bookingsRes.json();
-        const repairs = await repairsRes.json();
-
-        setData({
-          bookings,
-          stats: {
-            pendingBookings: bookings.filter((b: any) => b.status === "pending")
-              .length,
-            activeRepairs: repairs.filter(
-              (r: any) => r.status === "in_progress",
-            ).length,
-            totalPendingAmount: 0, // Placeholder
-          },
-        });
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+  const stats = {
+    pendingBookings: bookings.filter((b: any) => b.status === "pending").length,
+    activeRepairs: repairs.filter((r: any) => r.status === "in_progress")
+      .length,
+    totalPendingAmount: 0,
   };
 
-  useEffect(() => {
-    fetchAdminData();
-  }, []);
-
   const handleAction = async (id: string, status: string) => {
+    setUpdatingId(id);
     try {
       const res = await fetch(`/api/staff/bookings/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      if (res.ok) fetchAdminData();
+      if (res.ok) {
+        // Refresh immediately after action
+        queryClient.invalidateQueries({ queryKey: ["admin"] });
+      } else {
+        const error = await res.json();
+        alert(error.message || "ดำเนินการไม่สำเร็จ");
+      }
     } catch (err) {
-      alert("ดำเนินการไม่สำเร็จ");
+      alert("เชื่อมต่อเซิร์ฟเวอร์ผิดพลาด");
+    } finally {
+      setUpdatingId(null);
     }
   };
 
-  if (loading) {
+  const loading = isLoadingBookings || isLoadingRepairs;
+
+  if (loading && bookings.length === 0) {
     return (
       <div className="py-20 flex flex-col items-center gap-2">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -120,7 +111,7 @@ export default function AdminPage() {
                 </p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-black text-foreground">
-                    {data.stats.pendingBookings}
+                    {stats.pendingBookings}
                   </span>
                   <span className="text-xs text-muted-foreground font-medium">
                     คิวที่รอยืนยัน
@@ -141,7 +132,7 @@ export default function AdminPage() {
                 </p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-black text-foreground">
-                    {data.stats.activeRepairs}
+                    {stats.activeRepairs}
                   </span>
                   <span className="text-xs text-muted-foreground font-medium">
                     คันที่กำลังทำงาน
@@ -177,7 +168,7 @@ export default function AdminPage() {
             <h3 className="text-lg font-bold text-foreground">
               คำขอจองคิวใหม่
             </h3>
-            {data.bookings.filter((b) => b.status === "pending").length ===
+            {bookings.filter((b: any) => b.status === "pending").length ===
             0 ? (
               <div className="py-20 text-center bg-muted/20 border-2 border-dashed rounded-3xl">
                 <Check className="w-12 h-12 mx-auto mb-3 opacity-10 text-success" />
@@ -187,9 +178,9 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {data.bookings
-                  .filter((b) => b.status === "pending")
-                  .map((b) => (
+                {bookings
+                  .filter((b: any) => b.status === "pending")
+                  .map((b: any) => (
                     <Card
                       key={b.id}
                       className="group hover:border-primary/50 transition-all shadow-xs overflow-hidden"
@@ -227,15 +218,29 @@ export default function AdminPage() {
                               variant="ghost"
                               className="text-destructive h-10 px-4 hover:bg-destructive/10"
                               onClick={() => handleAction(b.id, "cancelled")}
+                              disabled={updatingId === b.id}
+                              loading={updatingId === b.id}
                             >
-                              <X className="w-4 h-4 mr-2" /> ปฏิเสธ
+                              {!updatingId || updatingId !== b.id ? (
+                                <>
+                                  <X className="w-4 h-4 mr-2" /> ปฏิเสธ
+                                </>
+                              ) : null}
                             </Button>
                             <Button
                               size="sm"
-                              className="h-10 px-6 shadow-md shadow-primary/20"
+                              variant="success"
+                              className="h-10 px-6 shadow-lg shadow-success/20 font-bold"
                               onClick={() => handleAction(b.id, "confirmed")}
+                              disabled={updatingId === b.id}
+                              loading={updatingId === b.id}
                             >
-                              <Check className="w-4 h-4 mr-2" /> ยืนยันการจอง
+                              {!updatingId || updatingId !== b.id ? (
+                                <>
+                                  <Check className="w-4 h-4 mr-2" />{" "}
+                                  ยืนยันการจอง
+                                </>
+                              ) : null}
                             </Button>
                           </div>
                         </div>
@@ -260,10 +265,10 @@ export default function AdminPage() {
             </h3>
             <Card>
               <CardContent className="p-0 divide-y">
-                {data.bookings
-                  .filter((b) => b.status !== "pending")
+                {bookings
+                  .filter((b: any) => b.status !== "pending")
                   .slice(0, 8)
-                  .map((b) => (
+                  .map((b: any) => (
                     <div
                       key={b.id}
                       className="p-4 flex items-center justify-between gap-4"

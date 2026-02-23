@@ -222,6 +222,21 @@ export default function RegisterPage() {
           autoComplete="new-password"
         />
 
+        <div className="pt-2">
+          <Input
+            id="inviteCode"
+            name="inviteCode"
+            label="รหัสเชิญชวน (สำหรับพนักงาน/แอดมิน)"
+            placeholder="เว้นว่างไว้หากเป็นลูกค้า"
+            value={form.inviteCode}
+            onChange={handleChange}
+            error={errors.inviteCode}
+          />
+          <p className="text-[10px] text-muted-foreground mt-1 px-1">
+            * หากเป็นพนักงานหรือแอดมิน กรุณากรอกรหัสลับที่ได้รับจากเจ้าของร้าน
+          </p>
+        </div>
+
         <Button
           type="submit"
           className="w-full gap-2"

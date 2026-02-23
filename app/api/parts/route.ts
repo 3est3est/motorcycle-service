@@ -45,12 +45,7 @@ export async function POST(request: Request) {
     const { name, description, price, stock_qty } = parsed.data;
 
     const part = await prisma.part.create({
-      data: {
-        name,
-        description,
-        price,
-        stock_qty,
-      },
+      data: parsed.data,
     });
 
     return NextResponse.json(part, { status: 201 });

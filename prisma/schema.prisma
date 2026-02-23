@@ -27,6 +27,7 @@ enum RepairJobStatus {
   in_progress
   completed
   delivered
+  cancelled
 }
 
 enum PaymentMethod {
@@ -86,6 +87,7 @@ model Motorcycle {
   model         String
   license_plate String   @unique
   year          Int?
+  image_url     String?
   created_at    DateTime @default(now()) @db.Timestamptz
 
   customer Customer  @relation(fields: [customer_id], references: [id])
@@ -153,15 +155,18 @@ model QuotationItem {
 }
 
 model RepairJob {
-  id                String          @id @default(uuid()) @db.Uuid
-  booking_id        String          @unique @db.Uuid
-  quotation_id      String?         @unique @db.Uuid
-  assigned_staff_id String?         @db.Uuid
-  start_date        DateTime?       @db.Timestamptz
-  end_date          DateTime?       @db.Timestamptz
-  labor_cost        Decimal         @default(0) @db.Decimal(10, 2)
-  status            RepairJobStatus @default(created)
-  created_at        DateTime        @default(now()) @db.Timestamptz
+  id                 String          @id @default(uuid()) @db.Uuid
+  booking_id         String          @unique @db.Uuid
+  quotation_id       String?         @unique @db.Uuid
+  assigned_staff_id  String?         @db.Uuid
+  start_date         DateTime?       @db.Timestamptz
+  end_date           DateTime?       @db.Timestamptz
+  labor_cost         Decimal         @default(0) @db.Decimal(10, 2)
+  status             RepairJobStatus @default(created)
+  progress           Int             @default(0)
+  note               String?
+  customer_confirmed Boolean         @default(false)
+  created_at         DateTime        @default(now()) @db.Timestamptz
 
   booking      Booking      @relation(fields: [booking_id], references: [id])
   quotation    Quotation?   @relation(fields: [quotation_id], references: [id])
@@ -177,6 +182,7 @@ model Part {
   description String?
   price       Decimal  @db.Decimal(10, 2)
   stock_qty   Int      @default(0)
+  image_url   String?
   created_at  DateTime @default(now()) @db.Timestamptz
 
   repair_parts    RepairPart[]
@@ -186,10 +192,12 @@ model Part {
 }
 
 model RepairPart {
-  id            String @id @default(uuid()) @db.Uuid
-  repair_job_id String @db.Uuid
-  part_id       String @db.Uuid
+  id            String  @id @default(uuid()) @db.Uuid
+  repair_job_id String  @db.Uuid
+  part_id       String  @db.Uuid
   quantity      Int
+  unit_price    Decimal @db.Decimal(10, 2)
+  price_total   Decimal @db.Decimal(10, 2)
 
   repair_job RepairJob @relation(fields: [repair_job_id], references: [id])
   part       Part      @relation(fields: [part_id], references: [id])
@@ -199,7 +207,7 @@ model RepairPart {
 
 model Payment {
   id            String        @id @default(uuid()) @db.Uuid
-  repair_job_id String        @db.Uuid
+  repair_job_id String        @unique @db.Uuid
   amount        Decimal       @db.Decimal(10, 2)
   method        PaymentMethod
   status        PaymentStatus @default(pending)
