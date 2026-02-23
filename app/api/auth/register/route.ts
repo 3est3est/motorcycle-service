@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { registerSchema } from "@/lib/validations";
-import { UserRole } from "@prisma/client";
+import { $Enums } from "@prisma/client";
 
 export async function POST(request: Request) {
   try {
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       data: {
         id: newUser.id,
         email: newUser.email!,
-        role: role as UserRole,
+        role: role as $Enums.UserRole,
         customer: {
           create: {
             full_name,
