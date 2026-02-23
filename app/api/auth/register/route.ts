@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { registerSchema } from "@/lib/validations";
-import { $Enums } from "@prisma/client";
+import { $Enums } from "@prisma/client"; // Use $Enums for compatibility with Next.js 15+ and Vercel builds
 
 export async function POST(request: Request) {
   try {
