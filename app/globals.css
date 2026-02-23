@@ -1,73 +1,95 @@
-@import url("https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap");
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Brand Colors */
-  --primary: 220 90% 56%;
-  --primary-foreground: 0 0% 98%;
-  --primary-hover: 220 90% 48%;
+  /* Premium Light Theme - Slate & Blue */
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
 
-  /* Background */
-  --background: 220 20% 97%;
-  --foreground: 220 25% 10%;
+  --primary: 221 83% 53%;
+  --primary-foreground: 210 40% 98%;
+
   --card: 0 0% 100%;
-  --card-foreground: 220 25% 10%;
+  --card-foreground: 222 47% 11%;
+
   --popover: 0 0% 100%;
-  --popover-foreground: 220 25% 10%;
+  --popover-foreground: 222 47% 11%;
 
-  /* Muted */
-  --muted: 220 15% 93%;
-  --muted-foreground: 220 15% 46%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222 47% 11.2%;
 
-  /* Accent */
-  --accent: 220 15% 93%;
-  --accent-foreground: 220 25% 10%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
 
-  /* Semantic */
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 0 0% 98%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222 47% 11.2%;
+
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+
   --success: 142 71% 45%;
-  --success-foreground: 0 0% 98%;
+  --success-foreground: 210 40% 98%;
+
   --warning: 38 92% 50%;
-  --warning-foreground: 0 0% 10%;
-  --info: 199 89% 48%;
+  --warning-foreground: 210 40% 10%;
 
-  /* Border & Input */
-  --border: 220 15% 87%;
-  --input: 220 15% 87%;
-  --ring: 220 90% 56%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 221 83% 53%;
 
-  /* Radius */
-  --radius: 0.625rem;
+  --radius: 0.75rem;
 
-  /* Sidebar */
-  --sidebar: 220 30% 12%;
-  --sidebar-foreground: 220 15% 80%;
-  --sidebar-active: 220 90% 56%;
-  --sidebar-active-foreground: 0 0% 100%;
-  --sidebar-hover: 220 25% 18%;
+  /* Sidebar - Light (Pure White) */
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 47% 11%;
+  --sidebar-muted: 215.4 16.3% 30%;
+  --sidebar-border: 214.3 31.8% 91.4%;
 }
 
 .dark {
-  --background: 220 25% 8%;
-  --foreground: 220 15% 92%;
-  --card: 220 25% 12%;
-  --card-foreground: 220 15% 92%;
-  --popover: 220 25% 12%;
-  --popover-foreground: 220 15% 92%;
+  /* Premium Dark Theme - Deep Slate & Indigo */
+  --background: 222 47% 4%;
+  --foreground: 210 40% 98%;
 
-  --muted: 220 20% 18%;
-  --muted-foreground: 220 15% 55%;
+  --primary: 217.2 91.2% 59.8%;
+  --primary-foreground: 222.2 47.4% 11.2%;
 
-  --accent: 220 20% 18%;
-  --accent-foreground: 220 15% 92%;
+  --card: 222 47% 6%;
+  --card-foreground: 210 40% 98%;
 
-  --border: 220 20% 20%;
-  --input: 220 20% 20%;
+  --popover: 222 47% 6%;
+  --popover-foreground: 210 40% 98%;
 
-  --sidebar: 220 30% 6%;
-  --sidebar-foreground: 220 15% 75%;
-  --sidebar-hover: 220 25% 12%;
+  --secondary: 217.2 32.6% 12%;
+  --secondary-foreground: 210 40% 98%;
+
+  --muted: 217.2 32.6% 12%;
+  --muted-foreground: 215 20.2% 65.1%;
+
+  --accent: 217.2 32.6% 12%;
+  --accent-foreground: 210 40% 98%;
+
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+
+  --success: 142 71% 35%;
+  --success-foreground: 210 40% 98%;
+
+  --warning: 38 92% 40%;
+  --warning-foreground: 210 40% 98%;
+
+  --border: 217.2 32.6% 15%;
+  --input: 217.2 32.6% 15%;
+  --ring: 224.3 76.3% 48%;
+
+  /* Sidebar - Dark (Deep Indigo) */
+  --sidebar: 222 47% 2%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-muted: 215 20.2% 65.1%;
+  --sidebar-border: 217.2 32.6% 15%;
 }
 
 @theme inline {
@@ -79,63 +101,99 @@
   --color-primary-foreground: hsl(var(--primary-foreground));
   --color-muted: hsl(var(--muted));
   --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-muted: hsl(var(--sidebar-muted));
+  --color-sidebar-border: hsl(var(--sidebar-border));
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
   --color-destructive: hsl(var(--destructive));
   --color-success: hsl(var(--success));
   --color-warning: hsl(var(--warning));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --font-sans: "Sarabun", "system-ui", sans-serif;
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 4px);
-  --radius-xl: calc(var(--radius) + 8px);
+  --color-font-sans: "Sarabun", "system-ui", sans-serif;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
 }
 
-* {
-  box-sizing: border-box;
-  border-color: hsl(var(--border));
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    box-sizing: border-box;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Sarabun", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
 }
 
-body {
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
-  font-family: "Sarabun", system-ui, sans-serif;
-  font-size: 16px;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* Custom Utilities for Tailwind 4 */
+@utility transition-liquid {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.3, 1.5, 0.5, 1);
+  transition-duration: 500ms;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
-}
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
+@utility active-bounce {
+  &:active {
+    transform: scale(0.96);
+    transition: transform 0.1s ease;
+  }
 }
 
-/* Focus ring */
-:focus-visible {
-  outline: 2px solid hsl(var(--ring));
-  outline-offset: 2px;
+/* Premium Component Styles */
+.glass {
+  @apply bg-white/20 dark:bg-black/10 backdrop-blur-md border border-white/20 dark:border-white/10;
+}
+
+.glass-card {
+  @apply bg-white/40 dark:bg-black/20 backdrop-blur-lg border border-white/30 dark:border-white/10 shadow-sm hover:shadow-xl hover:border-primary/40 transition-liquid;
+}
+
+.card-minimal {
+  @apply rounded-[2.5rem] border border-border/40 bg-card/20 backdrop-blur-md shadow-none hover:shadow-lg transition-liquid;
+}
+
+/* Status Badges */
+.badge-pending {
+  @apply bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800;
+}
+.badge-confirmed {
+  @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800;
+}
+.badge-cancelled {
+  @apply bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800;
+}
+.badge-completed {
+  @apply bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800;
+}
+
+/* Accent Glow System */
+.accent-glow {
+  @apply relative overflow-hidden;
+}
+.accent-glow::after {
+  content: "";
+  @apply absolute -top-1/2 -right-1/2 w-full h-full bg-primary/20 blur-[120px] rounded-full -z-10 pointer-events-none opacity-40;
+}
+.accent-glow-s::after {
+  @apply bg-secondary/20;
+}
+.accent-glow-su::after {
+  @apply bg-success/20;
+}
+.accent-glow-wa::after {
+  @apply bg-warning/20;
 }
 
 /* Animations */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -143,98 +201,30 @@ body {
   }
 }
 
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes pulse-soft {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-@keyframes shimmer {
-  from {
-    background-position: -200% 0;
-  }
-  to {
-    background-position: 200% 0;
-  }
-}
-
 .animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.animate-slide-in {
-  animation: slideInLeft 0.3s ease-out;
+/* daisyUI Configuration */
+@plugin "daisyui" {
+  themes: light, dark;
 }
 
-/* Skeleton loading */
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    hsl(var(--muted)) 25%,
-    hsl(var(--accent)) 50%,
-    hsl(var(--muted)) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-
-/* Typography Thai */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-weight: 600;
-  line-height: 1.4;
-  color: hsl(var(--foreground));
-}
-
-/* Status badge colors */
-.badge-pending {
-  background: hsl(38 92% 50% / 0.15);
-  color: hsl(38 80% 35%);
-}
-.badge-confirmed {
-  background: hsl(142 71% 45% / 0.15);
-  color: hsl(142 60% 30%);
-}
-.badge-cancelled {
-  background: hsl(0 72% 51% / 0.15);
-  color: hsl(0 65% 40%);
-}
-.badge-completed {
-  background: hsl(220 90% 56% / 0.15);
-  color: hsl(220 80% 40%);
-}
-.dark .badge-pending {
-  background: hsl(38 92% 50% / 0.2);
-  color: hsl(38 92% 70%);
-}
-.dark .badge-confirmed {
-  background: hsl(142 71% 45% / 0.2);
-  color: hsl(142 71% 60%);
-}
-.dark .badge-cancelled {
-  background: hsl(0 72% 51% / 0.2);
-  color: hsl(0 72% 65%);
-}
-.dark .badge-completed {
-  background: hsl(220 90% 56% / 0.2);
-  color: hsl(220 90% 75%);
+@layer base {
+  :root {
+    --p: 221 83% 53%;
+    --pc: 210 40% 98%;
+    --s: 210 40% 96.1%;
+    --sc: 222 47% 11.2%;
+    --b1: 210 40% 98%;
+    --bc: 222 47% 11%;
+  }
+  .dark {
+    --p: 217.2 91.2% 59.8%;
+    --pc: 222.2 47.4% 11.2%;
+    --s: 217.2 32.6% 12%;
+    --sc: 210 40% 98%;
+    --b1: 222 47% 4%;
+    --bc: 210 40% 98%;
+  }
 }

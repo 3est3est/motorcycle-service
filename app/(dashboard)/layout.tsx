@@ -40,34 +40,61 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  // Get role and display name from DB
+  // Get role and display name from DB or metadata
   let role: UserRole = "customer";
-  let userName = authUser.email ?? "ผู้ใช้งาน";
+  let userName =
+    authUser.user_metadata?.full_name ?? authUser.email ?? "ผู้ใช้งาน";
   let userEmail = authUser.email ?? "";
 
   try {
-    const dbUser = await prisma.user.findUnique({
+    const meta = authUser.user_metadata;
+
+    // Use upsert to prevent race conditions and ensure user data is synced
+    const dbUser = await prisma.user.upsert({
       where: { id: authUser.id },
+      update: {
+        email: authUser.email!,
+        role: (meta?.role as UserRole) ?? "customer",
+        customer: {
+          upsert: {
+            create: {
+              full_name:
+                meta?.full_name ?? authUser.email?.split("@")[0] ?? "ผู้ใช้งาน",
+              phone: meta?.phone ?? "",
+            },
+            update: {
+              full_name:
+                meta?.full_name ?? authUser.email?.split("@")[0] ?? "ผู้ใช้งาน",
+              phone: meta?.phone ?? "",
+            },
+          },
+        },
+      },
+      create: {
+        id: authUser.id,
+        email: authUser.email!,
+        role: (meta?.role as UserRole) ?? "customer",
+        customer: {
+          create: {
+            full_name:
+              meta?.full_name ?? authUser.email?.split("@")[0] ?? "ผู้ใช้งาน",
+            phone: meta?.phone ?? "",
+          },
+        },
+      },
       include: { customer: true },
     });
 
-    if (dbUser) {
-      role = dbUser.role as UserRole;
-      if (dbUser.customer?.full_name) {
-        userName = dbUser.customer.full_name;
-      }
-      userEmail = dbUser.email;
-    } else {
-      // Fallback to metadata if DB not yet synced
-      const meta = authUser.user_metadata;
-      role = (meta?.role as UserRole) ?? "customer";
-      userName = meta?.full_name ?? authUser.email ?? "ผู้ใช้งาน";
+    // Update local variables from DB
+    role = dbUser.role as UserRole;
+    if (dbUser.customer?.full_name) {
+      userName = dbUser.customer.full_name;
     }
-  } catch {
-    // DB might not have the user yet — use auth metadata
-    const meta = authUser.user_metadata;
-    role = (meta?.role as UserRole) ?? "customer";
-    userName = meta?.full_name ?? authUser.email ?? "ผู้ใช้งาน";
+    userEmail = dbUser.email;
+  } catch (error) {
+    console.error("Dashboard layout sync error:", error);
+    // Fallback to metadata if DB fails completely
+    role = (authUser.user_metadata?.role as UserRole) ?? "customer";
   }
 
   return (

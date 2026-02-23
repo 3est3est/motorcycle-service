@@ -1,152 +1,251 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { TopBar } from "@/components/layout/topbar";
-import { Card, CardContent } from "@/components/ui/card";
-import { Star, TrendingUp, Gift, ArrowUp, ArrowDown } from "lucide-react";
-import type { Metadata } from "next";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Star,
+  History,
+  TrendingUp,
+  Gift,
+  ArrowUpRight,
+  ArrowDownRight,
+  Loader2,
+  AlertCircle,
+} from "lucide-react";
+import { format } from "date-fns";
+import { th } from "date-fns/locale";
 
-export const metadata: Metadata = {
-  title: "คะแนนสะสม",
-};
+interface PointTransaction {
+  id: string;
+  event_type: "earn" | "redeem" | "adjust";
+  points: number;
+  created_at: string;
+}
 
-const totalPoints = 1250;
-
-const transactions = [
-  {
-    id: "PT-001",
-    type: "earn" as const,
-    points: 700,
-    description: "ชำระเงินงานซ่อม RJ-0038",
-    date: "12 ม.ค. 2569",
-  },
-  {
-    id: "PT-002",
-    type: "earn" as const,
-    points: 550,
-    description: "ชำระเงินงานซ่อม RJ-0035",
-    date: "5 ธ.ค. 2568",
-  },
-];
+interface PointsData {
+  total_points: number;
+  transactions: PointTransaction[];
+}
 
 export default function PointsPage() {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<PointsData>({
+    total_points: 0,
+    transactions: [],
+  });
+
+  useEffect(() => {
+    const fetchPoints = async () => {
+      try {
+        const res = await fetch("/api/points");
+        if (res.ok) {
+          const result = await res.json();
+          setData(result);
+        }
+      } catch (err) {
+        console.error("Failed to fetch points", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPoints();
+  }, []);
+
+  const eventLabel = {
+    earn: {
+      label: "ได้รับ",
+      color: "text-success",
+      bg: "bg-success/10",
+      icon: ArrowUpRight,
+    },
+    redeem: {
+      label: "แลกใช้",
+      color: "text-destructive",
+      bg: "bg-destructive/10",
+      icon: ArrowDownRight,
+    },
+    adjust: {
+      label: "ปรับปรุง",
+      color: "text-primary",
+      bg: "bg-primary/10",
+      icon: History,
+    },
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary mb-2" />
+        <p className="text-muted-foreground">กำลังโหลดข้อมูลคะแนนสะสม...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="animate-fade-in">
-      <TopBar title="คะแนนสะสม" subtitle="ดูและติดตามแต้มสะสมของคุณ" />
+    <div className="animate-fade-in pb-10">
+      <TopBar
+        title="คะแนนสะสม"
+        subtitle="ตรวจสอบแต้มสะสมและสิทธิพิเศษสำหรับคุณ"
+      />
+
       <div className="p-4 sm:p-6 space-y-6">
-        {/* Points card */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-primary/70 text-white p-6 sm:p-8">
-          <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/3" />
-          <div className="absolute bottom-0 left-1/3 w-24 h-24 bg-white/5 rounded-full translate-y-1/3" />
-
-          <div className="relative">
-            <div className="flex items-center gap-2 mb-4">
-              <Star className="w-5 h-5 text-yellow-300 fill-yellow-300" />
-              <span className="text-primary-foreground/80 text-sm font-medium">
-                คะแนนสะสมของคุณ
-              </span>
+        {/* Main Points Card */}
+        <div className="relative overflow-hidden bg-linear-to-br from-primary to-primary-foreground p-8 rounded-3xl text-white shadow-lg shadow-primary/20">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <p className="text-white/80 text-sm font-medium">
+                คะแนนปัจจุบันของคุณ
+              </p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-5xl font-black tracking-tight">
+                  {data.total_points.toLocaleString("th-TH")}
+                </span>
+                <span className="text-xl font-medium opacity-80">แต้ม</span>
+              </div>
             </div>
-            <p className="text-5xl sm:text-6xl font-bold mb-1">
-              {totalPoints.toLocaleString("th-TH")}
-            </p>
-            <p className="text-primary-foreground/70 text-sm">แต้ม</p>
-
-            <div className="flex flex-wrap gap-4 mt-6 pt-6 border-t border-white/20">
-              <div>
-                <p className="text-xs text-primary-foreground/60 mb-0.5">
-                  แต้มที่ได้รับ
-                </p>
-                <p className="font-bold">+1,250 แต้ม</p>
+            <div className="flex gap-3">
+              <div className="flex flex-col items-center px-4 py-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20">
+                <TrendingUp className="w-5 h-5 mb-1" />
+                <span className="text-xs opacity-80 uppercase tracking-wider">
+                  Level
+                </span>
+                <span className="font-bold">Member</span>
               </div>
-              <div>
-                <p className="text-xs text-primary-foreground/60 mb-0.5">
-                  ใช้ไปแล้ว
-                </p>
-                <p className="font-bold">0 แต้ม</p>
-              </div>
-              <div>
-                <p className="text-xs text-primary-foreground/60 mb-0.5">
-                  อัตราสะสม
-                </p>
-                <p className="font-bold">1 แต้ม / ฿1</p>
+              <div className="flex flex-col items-center px-4 py-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20">
+                <Gift className="w-5 h-5 mb-1" />
+                <span className="text-xs opacity-80 uppercase tracking-wider">
+                  Rewards
+                </span>
+                <span className="font-bold">4 Available</span>
               </div>
             </div>
           </div>
+          {/* Abstract BG Decorations */}
+          <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-[-20%] left-[-5%] w-48 h-48 bg-primary-foreground/20 rounded-full blur-2xl" />
         </div>
 
-        {/* Info cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Card>
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-success" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Points History */}
+          <Card className="lg:col-span-2 border-border/50 shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/30 border-b border-border/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">ประวัติคะแนน</CardTitle>
+                  <CardDescription>
+                    รายการรับและแลกคะแนนสะสมย้อนหลัง
+                  </CardDescription>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">
-                  แต้มรอบนี้
-                </p>
-                <p className="font-bold text-foreground text-lg">+700 แต้ม</p>
-                <p className="text-xs text-muted-foreground">
-                  จากการชำระเงินล่าสุด
-                </p>
-              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {data.transactions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground bg-muted/10">
+                  <Star className="w-12 h-12 mb-3 opacity-20" />
+                  <p className="text-sm">ยังไม่มีรายการแต้มสะสม</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border/50">
+                  {data.transactions.map((tx) => {
+                    const cfg = eventLabel[tx.event_type] || eventLabel.adjust;
+                    const TxIcon = cfg.icon;
+                    return (
+                      <div
+                        key={tx.id}
+                        className="flex items-center justify-between p-4 px-6 hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div
+                            className={`w-10 h-10 rounded-xl ${cfg.bg} ${cfg.color} flex items-center justify-center shrink-0`}
+                          >
+                            <TxIcon className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="font-bold text-foreground">
+                              {cfg.label}คะแนน
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {format(
+                                new Date(tx.created_at),
+                                "d MMMM yyyy, HH:mm น.",
+                                { locale: th },
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div
+                          className={`text-right ${tx.event_type === "earn" ? "text-success" : "text-destructive"} font-bold text-lg`}
+                        >
+                          {tx.event_type === "earn" ? "+" : "-"}
+                          {tx.points.toLocaleString("th-TH")}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <Gift className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">
-                  แลกรับได้
-                </p>
-                <p className="font-bold text-foreground text-lg">12 รายการ</p>
-                <p className="text-xs text-muted-foreground">
-                  สิทธิประโยชน์ที่พร้อมแลก
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
 
-        {/* Transaction history */}
-        <div>
-          <h2 className="text-sm font-semibold text-foreground mb-3">
-            ประวัติคะแนน
-          </h2>
-          <Card>
-            {transactions.map((tx, idx) => (
-              <CardContent
-                key={tx.id}
-                className={`p-4 flex items-center justify-between ${
-                  idx < transactions.length - 1 ? "border-b border-border" : ""
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center ${
-                      tx.type === "earn" ? "bg-success/10" : "bg-destructive/10"
-                    }`}
-                  >
-                    {tx.type === "earn" ? (
-                      <ArrowUp className="w-4 h-4 text-success" />
-                    ) : (
-                      <ArrowDown className="w-4 h-4 text-destructive" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      {tx.description}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{tx.date}</p>
+          {/* Special Rewards (Mockup) */}
+          <Card className="border-border/50 shadow-sm overflow-hidden h-fit">
+            <CardHeader className="bg-muted/30 border-b border-border/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-warning/10 text-warning">
+                  <Gift className="w-5 h-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">สิทธิพิเศษ</CardTitle>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              {[
+                { title: "ฟรีค่าแรงเปลี่ยนถ่ายน้ำมันเครื่อง", cost: 500 },
+                { title: "ส่วนลดอะไหล่ 10%", cost: 1200 },
+              ].map((reward) => (
+                <div
+                  key={reward.title}
+                  className="p-4 rounded-2xl border border-border/50 bg-muted/20 opacity-80 cursor-not-allowed group"
+                >
+                  <p className="text-sm font-bold text-foreground mb-2">
+                    {reward.title}
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Star className="w-3 h-3 text-warning fill-warning" />
+                      {reward.cost} แต้ม
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] uppercase font-bold tracking-wider"
+                    >
+                      🔒 Locked
+                    </Badge>
                   </div>
                 </div>
-                <p
-                  className={`font-bold ${tx.type === "earn" ? "text-success" : "text-destructive"}`}
-                >
-                  {tx.type === "earn" ? "+" : "-"}
-                  {tx.points} แต้ม
+              ))}
+              <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10 flex items-center gap-3">
+                <div className="p-2 rounded-full bg-primary/10">
+                  <AlertCircle className="w-4 h-4 text-primary" />
+                </div>
+                <p className="text-[10px] text-primary/80 leading-relaxed font-medium">
+                  สะสมแต้มจากการชำระค่าบริการ ทุกๆ 100 บาท รับ 10 แต้ม
+                  เพื่อแลกรับสิทธิพิเศษมากมาย
                 </p>
-              </CardContent>
-            ))}
+              </div>
+            </CardContent>
           </Card>
         </div>
       </div>

@@ -32,26 +32,45 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
+  const role = user?.user_metadata?.role || "customer";
+  const path = request.nextUrl.pathname;
 
   // Public paths that don't require auth
   const publicPaths = ["/", "/login", "/register"];
   const isPublicPath = publicPaths.some(
-    (path) => pathname === path || pathname.startsWith("/api/auth"),
+    (p) => path === p || path.startsWith("/api/auth"),
   );
 
-  // If not authenticated and trying to access protected route
+  // 1. ถ้าไม่ได้ Login และเข้าหน้าอื่นที่ไม่ใช่หน้า Login/Register -> ไปหน้า Login
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  // If authenticated and trying to access auth pages
-  if (user && (pathname === "/login" || pathname === "/register")) {
+  // 2. ถ้า Login แล้ว และพยายามเข้าหน้า Login/Register -> ไป Dashboard
+  if (user && isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
+  }
+
+  // 3. ป้องกันเส้นทางตามสิทธิ (Role Protection)
+  const isShopManagement = ["/admin", "/parts", "/repair-jobs"].some((p) =>
+    path.startsWith(p),
+  );
+  const isAdminOnly = ["/users"].some((p) => path.startsWith(p));
+
+  if (user) {
+    // ลูกค้าห้ามเข้าโซนคนของร้าน
+    if (role === "customer" && (isShopManagement || isAdminOnly)) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+
+    // พนักงานห้ามเข้าโซนแอดมิน (จัดการผู้ใช้/ตั้งค่าระบบ)
+    if (role === "staff" && isAdminOnly) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
   }
 
   return supabaseResponse;
