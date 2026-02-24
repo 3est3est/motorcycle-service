@@ -55,6 +55,19 @@ export default function UsersManagementPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+
+  const fetchProfile = async () => {
+    try {
+      const res = await fetch("/api/profile");
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentUserRole(data.role);
+      }
+    } catch (err) {
+      console.error("Failed to fetch profile", err);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -71,6 +84,7 @@ export default function UsersManagementPage() {
   };
 
   useEffect(() => {
+    fetchProfile();
     fetchUsers();
   }, []);
 
@@ -140,7 +154,9 @@ export default function UsersManagementPage() {
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto order-1 sm:order-2">
-            <AddUserModal onSuccess={fetchUsers} />
+            {currentUserRole === "admin" && (
+              <AddUserModal onSuccess={fetchUsers} />
+            )}
             <div className="hidden sm:flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest bg-secondary/30 px-4 py-3 rounded-2xl border border-border/50">
               <Users className="w-4 h-4" />
               {users.length} Users
@@ -175,9 +191,11 @@ export default function UsersManagementPage() {
                       <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                         วันที่เข้าร่วม
                       </th>
-                      <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        จัดการ
-                      </th>
+                      {currentUserRole === "admin" && (
+                        <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          จัดการ
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
@@ -218,68 +236,70 @@ export default function UsersManagementPage() {
                               locale: th,
                             })}
                           </td>
-                          <td className="px-6 py-4 text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  disabled={updatingId === u.id}
+                          {currentUserRole === "admin" && (
+                            <td className="px-6 py-4 text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    disabled={updatingId === u.id}
+                                  >
+                                    {updatingId === u.id ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <MoreVertical className="w-4 h-4" />
+                                    )}
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  className="w-48 rounded-xl"
                                 >
-                                  {updatingId === u.id ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <MoreVertical className="w-4 h-4" />
-                                  )}
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="end"
-                                className="w-48 rounded-xl"
-                              >
-                                <DropdownMenuLabel>
-                                  กำหนดสิทธิ์ใหม่
-                                </DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    handleUpdateRole(u.id, "customer")
-                                  }
-                                  className="gap-2"
-                                >
-                                  <UserIcon className="w-4 h-4 text-success" />{" "}
-                                  เป็นลูกค้า
-                                  {u.role === "customer" && (
-                                    <Check className="w-3 h-3 ml-auto" />
-                                  )}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    handleUpdateRole(u.id, "staff")
-                                  }
-                                  className="gap-2"
-                                >
-                                  <Wrench className="w-4 h-4 text-primary" />{" "}
-                                  เป็นช่าง/พนักงาน
-                                  {u.role === "staff" && (
-                                    <Check className="w-3 h-3 ml-auto" />
-                                  )}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    handleUpdateRole(u.id, "admin")
-                                  }
-                                  className="gap-2"
-                                >
-                                  <ShieldCheck className="w-4 h-4 text-destructive" />{" "}
-                                  เป็นผู้ดูแลระบบ
-                                  {u.role === "admin" && (
-                                    <Check className="w-3 h-3 ml-auto" />
-                                  )}
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </td>
+                                  <DropdownMenuLabel>
+                                    กำหนดสิทธิ์ใหม่
+                                  </DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      handleUpdateRole(u.id, "customer")
+                                    }
+                                    className="gap-2"
+                                  >
+                                    <UserIcon className="w-4 h-4 text-success" />{" "}
+                                    เป็นลูกค้า
+                                    {u.role === "customer" && (
+                                      <Check className="w-3 h-3 ml-auto" />
+                                    )}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      handleUpdateRole(u.id, "staff")
+                                    }
+                                    className="gap-2"
+                                  >
+                                    <Wrench className="w-4 h-4 text-primary" />{" "}
+                                    เป็นช่าง/พนักงาน
+                                    {u.role === "staff" && (
+                                      <Check className="w-3 h-3 ml-auto" />
+                                    )}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      handleUpdateRole(u.id, "admin")
+                                    }
+                                    className="gap-2"
+                                  >
+                                    <ShieldCheck className="w-4 h-4 text-destructive" />{" "}
+                                    เป็นผู้ดูแลระบบ
+                                    {u.role === "admin" && (
+                                      <Check className="w-3 h-3 ml-auto" />
+                                    )}
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}

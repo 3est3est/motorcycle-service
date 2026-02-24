@@ -10,7 +10,8 @@ export async function GET() {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user || user.user_metadata.role !== "admin") {
+    const userRole = user?.user_metadata?.role;
+    if (!user || (userRole !== "admin" && userRole !== "staff")) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
 

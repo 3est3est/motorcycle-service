@@ -82,9 +82,9 @@ const navItems: NavItem[] = [
   },
   {
     href: "/users",
-    label: "จัดการผู้ใช้",
+    label: "ผู้ใช้งาน",
     icon: Users,
-    roles: ["admin"],
+    roles: ["staff", "admin"],
   },
   {
     href: "/profile",

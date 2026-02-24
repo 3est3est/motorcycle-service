@@ -56,10 +56,10 @@ export async function proxy(request: NextRequest) {
   }
 
   // 3. ป้องกันเส้นทางตามสิทธิ (Role Protection)
-  const isShopManagement = ["/admin", "/parts", "/repair-jobs"].some((p) =>
-    path.startsWith(p),
+  const isShopManagement = ["/admin", "/parts", "/repair-jobs", "/users"].some(
+    (p) => path.startsWith(p),
   );
-  const isAdminOnly = ["/users"].some((p) => path.startsWith(p));
+  const isAdminOnly = [].some((p) => path.startsWith(p));
 
   if (user) {
     // ลูกค้าห้ามเข้าโซนคนของร้าน

@@ -31,14 +31,16 @@ export async function GET() {
     if (!user)
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const customer = await prisma.customer.findUnique({
-      where: { user_id: user.id },
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { customer: true },
     });
 
     return NextResponse.json({
       email: user.email,
-      full_name: customer?.full_name || "",
-      phone: customer?.phone || "",
+      full_name: dbUser?.customer?.full_name || "",
+      phone: dbUser?.customer?.phone || "",
+      role: dbUser?.role || "customer",
     });
   } catch (error) {
     return NextResponse.json(
