@@ -69,7 +69,7 @@ const navItems: NavItem[] = [
     href: "/estimates",
     label: "ใบประเมินราคา",
     icon: Files,
-    roles: ["customer"],
+    roles: ["customer", "staff", "admin"],
   },
   {
     href: "/quotations",
