@@ -555,11 +555,17 @@ export default function UsersManagementPage() {
                 จำนวนแต้มที่ต้องการ {pointAdjust.type === "earn" ? "เพิ่ม" : pointAdjust.type === "redeem" ? "หักออก" : "ปรับปรุง"}
               </label>
               <Input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 placeholder="ระบุจำนวนแต้ม..."
                 className="h-16 rounded-2xl bg-muted/20 border-none px-8 font-black text-2xl text-center focus-visible:ring-primary/20 shadow-inner"
                 value={pointAdjust.amount}
-                onChange={(e) => setPointAdjust({ ...pointAdjust, amount: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "" || /^[0-9]*$/.test(val)) {
+                    setPointAdjust({ ...pointAdjust, amount: val });
+                  }
+                }}
               />
             </div>
           </div>

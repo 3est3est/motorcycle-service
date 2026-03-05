@@ -520,30 +520,48 @@ export default function PartsPage() {
                   <div className="space-y-2.5">
                     <Label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-1">ราคาขาย</Label>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       required
-                      value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                      value={formData.price === 0 && !editingPart ? "" : formData.price}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "" || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                          setFormData({ ...formData, price: val === "" ? 0 : Number(val) });
+                        }
+                      }}
                       className="h-14 rounded-2xl border-none bg-muted/30 font-black text-center text-lg focus-visible:ring-primary shadow-inner"
                     />
                   </div>
                   <div className="space-y-2.5">
                     <Label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-1">สต็อกปัจจุบัน</Label>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       required
-                      value={formData.stock_qty}
-                      onChange={(e) => setFormData({ ...formData, stock_qty: Number(e.target.value) })}
+                      value={formData.stock_qty === 0 && !editingPart ? "" : formData.stock_qty}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "" || /^[0-9]*$/.test(val)) {
+                          setFormData({ ...formData, stock_qty: val === "" ? 0 : Number(val) });
+                        }
+                      }}
                       className="h-14 rounded-2xl border-none bg-muted/30 font-black text-center text-lg focus-visible:ring-primary shadow-inner"
                     />
                   </div>
                   <div className="space-y-2.5">
                     <Label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-1">จุดเตือนสต็อกต่ำ</Label>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       required
-                      value={formData.min_stock}
-                      onChange={(e) => setFormData({ ...formData, min_stock: Number(e.target.value) })}
+                      value={formData.min_stock === 0 && !editingPart ? "" : formData.min_stock}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "" || /^[0-9]*$/.test(val)) {
+                          setFormData({ ...formData, min_stock: val === "" ? 0 : Number(val) });
+                        }
+                      }}
                       className="h-14 rounded-2xl border-none bg-muted/30 font-black text-center text-lg focus-visible:ring-primary shadow-inner"
                     />
                   </div>

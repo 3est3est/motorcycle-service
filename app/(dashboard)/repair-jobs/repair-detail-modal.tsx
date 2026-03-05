@@ -218,14 +218,24 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
   };
 
   const handleAddQuotationItem = () => {
-    if (!newQItem.description && newQItem.labor === 0) return;
+    let finalDesc = newQItem.description;
+    if (!finalDesc && newQItem.part_id) {
+      const p = allParts.find((ap: any) => ap.id === newQItem.part_id);
+      if (p) finalDesc = p.name;
+    }
+
+    if (!finalDesc && newQItem.labor === 0) {
+      toast.error("กรุณาระบุรายละเอียดหรือเลือกอะไหล่");
+      return;
+    }
+
     setQuotationItems((prev) => [
       ...prev,
       {
-        description: newQItem.description,
+        description: finalDesc,
         labor: newQItem.labor,
-        part_id: newQItem.part_id || undefined,
-        part_qty: newQItem.part_id ? newQItem.part_qty : undefined,
+        part_id: newQItem.part_id && newQItem.part_id !== "none" ? newQItem.part_id : undefined,
+        part_qty: newQItem.part_id && newQItem.part_id !== "none" ? newQItem.part_qty : undefined,
       },
     ]);
     setNewQItem({ description: "", labor: 0, part_id: "", part_qty: 1 });
@@ -316,6 +326,10 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
 
   const handleAddPart = async () => {
     if (!job || !selectedPartId) return;
+    if (partQty <= 0) {
+      toast.error("กรุณาระบุจำนวนอะไหล่อย่างน้อย 1 ชิ้น");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/staff/repairs/${job.id}/parts`, {
@@ -328,9 +342,12 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
         setSelectedPartId("");
         setPartQty(1);
         toast.success("เพิ่มรายการอะไหล่สำเร็จ");
+      } else {
+        const err = await res.json();
+        toast.error(err.message || "เพิ่มอะไหล่ไม่สำเร็จ");
       }
-    } catch {
-      toast.error("เพิ่มอะไหล่ไม่สำเร็จ");
+    } catch (error) {
+      toast.error("เกิดข้อผิดพลาดในการเชื่อมต่อ");
     } finally {
       setLoading(false);
     }
@@ -537,10 +554,16 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
                         ราคาประเมินเบื้องต้น (บาท)
                       </label>
                       <Input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         className="h-14 rounded-2xl bg-muted/20 border-none font-black text-xl text-amber-600 focus-visible:ring-amber-500/20 px-6"
-                        value={estimatedCost}
-                        onChange={(e) => setEstimatedCost(e.target.value)}
+                        value={estimatedCost === "0" ? "" : estimatedCost}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "" || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                            setEstimatedCost(val);
+                          }
+                        }}
                       />
                     </div>
                     <Button
@@ -597,16 +620,20 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
                         }
                       />
                       <Input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="ค่าแรง (บาท)"
                         className="h-12 rounded-xl bg-background border-none focus-visible:ring-primary/20 font-bold"
-                        value={newQItem.labor || ""}
-                        onChange={(e) =>
-                          setNewQItem({
-                            ...newQItem,
-                            labor: parseFloat(e.target.value) || 0,
-                          })
-                        }
+                        value={newQItem.labor === 0 ? "" : newQItem.labor}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "" || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                            setNewQItem({
+                              ...newQItem,
+                              labor: val === "" ? 0 : parseFloat(val),
+                            });
+                          }
+                        }}
                       />
                       <div className="sm:col-span-2 space-y-2">
                         <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 px-1">
@@ -621,10 +648,7 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
                               <Input
                                 placeholder="ค้นหาชื่ออะไหล่..."
                                 className="h-8 text-xs bg-background border-dashed"
-                                onChange={(e) => {
-                                  // Simple local filter logic could go here if we had a dedicated state,
-                                  // but standard Select is tricky. For now, we'll keep it as a cleaner list.
-                                }}
+                                onChange={(e) => {}}
                               />
                             </div>
                             <SelectItem value="none">— ไม่ใช้อะไหล่ —</SelectItem>
@@ -639,6 +663,28 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
                           </SelectContent>
                         </Select>
                       </div>
+                      {newQItem.part_id && newQItem.part_id !== "none" && (
+                        <div className="sm:col-span-2 space-y-2 animate-in fade-in zoom-in-95 duration-300">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 px-1">
+                            จำนวนอะไหล่ (Quotation)
+                          </label>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            className="h-12 rounded-xl bg-background border-none focus-visible:ring-primary/20 font-black text-center"
+                            value={newQItem.part_qty === 0 ? "" : newQItem.part_qty}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "" || /^[0-9]*$/.test(val)) {
+                                setNewQItem({
+                                  ...newQItem,
+                                  part_qty: val === "" ? 0 : parseInt(val),
+                                });
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                     <Button
                       variant="outline"
@@ -749,10 +795,16 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
                           จำนวน
                         </label>
                         <Input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           className="w-full h-14 rounded-xl bg-background border-none text-center font-black text-lg shadow-sm"
-                          value={partQty}
-                          onChange={(e) => setPartQty(parseInt(e.target.value) || 1)}
+                          value={partQty === 0 ? "" : partQty}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "" || /^[0-9]*$/.test(val)) {
+                              setPartQty(val === "" ? 0 : parseInt(val));
+                            }
+                          }}
                         />
                       </div>
                       <Button
@@ -824,10 +876,16 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
                         ค่าแรงที่ใช้จริง (ตามประกาศร้าน)
                       </label>
                       <Input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         className="h-14 rounded-2xl bg-muted/20 border-none font-black text-xl text-primary focus-visible:ring-primary/20 px-6"
-                        value={laborCost}
-                        onChange={(e) => setLaborCost(e.target.value)}
+                        value={laborCost === "0" ? "" : laborCost}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "" || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                            setLaborCost(val);
+                          }
+                        }}
                       />
                     </div>
 

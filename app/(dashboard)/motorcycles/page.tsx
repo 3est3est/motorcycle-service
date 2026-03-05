@@ -274,16 +274,20 @@ export default function MotorcyclesPage() {
                     <div className="space-y-2">
                       <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">ปีที่จดทะเบียน</Label>
                       <Input
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
                         placeholder="เช่น 2566"
                         className="h-12 bg-muted/30 border-none font-bold focus-visible:ring-primary/40 rounded-xl px-4"
                         value={form.year?.toString() || ""}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            year: e.target.value ? Number(e.target.value) : undefined,
-                          })
-                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "" || /^[0-9]*$/.test(val)) {
+                            setForm({
+                              ...form,
+                              year: val ? Number(val) : undefined,
+                            });
+                          }
+                        }}
                       />
                       {errors.year && <p className="text-[10px] text-destructive font-bold uppercase tracking-wider px-1">{errors.year}</p>}
                     </div>
