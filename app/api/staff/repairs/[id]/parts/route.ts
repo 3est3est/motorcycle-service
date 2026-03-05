@@ -5,10 +5,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 // GET /api/staff/repairs/[id]/parts - Get parts for a repair job
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id: repair_job_id } = await params;
     const parts = await prisma.repairPart.findMany({
@@ -17,39 +14,38 @@ export async function GET(
     });
     return NextResponse.json(parts);
   } catch (error) {
-    return NextResponse.json(
-      { message: "Internal Server Error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
   }
 }
 
 // POST /api/staff/repairs/[id]/parts - Add part to repair job
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id: repair_job_id } = await params;
     const { part_id, quantity } = await request.json();
 
     // Get auth user
     const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll() {},
+    const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
         },
+        setAll() {},
       },
-    );
+    });
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ message: "Unauthorized", errorCode: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    const role = user.user_metadata?.role;
+    if (role !== "staff" && role !== "admin") {
+      return NextResponse.json({ message: "Forbidden", errorCode: "FORBIDDEN" }, { status: 403 });
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Check Part & Stock
@@ -124,23 +120,14 @@ export async function POST(
       return NextResponse.json({ message: "ไม่พบอะไหล่" }, { status: 404 });
     }
     if (error.message === "INSUFFICIENT_STOCK") {
-      return NextResponse.json(
-        { message: "จำนวนอะไหล่ในสต็อกไม่เพียงพอ" },
-        { status: 400 },
-      );
+      return NextResponse.json({ message: "จำนวนอะไหล่ในสต็อกไม่เพียงพอ" }, { status: 400 });
     }
-    return NextResponse.json(
-      { message: "Internal Server Error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
   }
 }
 
 // DELETE /api/staff/repairs/[id]/parts - Remove a part and return to stock
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id: repair_job_id } = await params;
     const { searchParams } = new URL(request.url);
@@ -152,18 +139,14 @@ export async function DELETE(
 
     // Get auth user
     const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll() {},
+    const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
         },
+        setAll() {},
       },
-    );
+    });
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -204,9 +187,6 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Delete Part Error:", error);
-    return NextResponse.json(
-      { message: "Internal Server Error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
   }
 }

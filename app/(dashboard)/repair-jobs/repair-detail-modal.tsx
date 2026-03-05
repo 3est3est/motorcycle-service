@@ -79,6 +79,7 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
     part_id: "",
     part_qty: 1,
   });
+  const [partSearch, setPartSearch] = useState("");
 
   // Mechanic assignment
   const [assignedStaffId, setAssignedStaffId] = useState<string>("");
@@ -128,6 +129,10 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
     },
     enabled: !!job,
   });
+
+  const filteredParts = allParts.filter(
+    (p: any) => p.name.toLowerCase().includes(partSearch.toLowerCase()) || p.description?.toLowerCase().includes(partSearch.toLowerCase()),
+  );
 
   const { data: existingPayment, refetch: refetchPayment } = useQuery({
     queryKey: ["payment-for-job", job?.id],
@@ -314,6 +319,7 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
       if (res.ok) {
         refetchPayment();
         queryClient.invalidateQueries({ queryKey: ["repairs"] });
+        queryClient.invalidateQueries({ queryKey: ["payments"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
         toast.success("ยืนยันการชำระเงินสำเร็จ มอบคะแนนสะสมให้ลูกค้าแล้ว");
       }
@@ -590,170 +596,209 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <FileSearch className="w-5 h-5 text-blue-500" />
-                      <h4 className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">ทำใบเสนอราคา (Quotation)</h4>
+                      <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground">ใบเสนอราคา (Quotation)</h4>
                     </div>
                     {existingQuotation && (
                       <Badge
                         className={cn(
-                          "bg-blue-500/10 text-blue-600 border-none font-black text-[9px] uppercase tracking-widest",
+                          "bg-blue-500/10 text-blue-600 border-none font-black text-[9px] uppercase tracking-widest px-3 py-1",
                           existingQuotation.status === "approved" && "bg-emerald-500/10 text-emerald-600",
                           existingQuotation.status === "rejected" && "bg-rose-500/10 text-rose-600",
                         )}
                       >
-                        สถานะ: {existingQuotation.status}
+                        {existingQuotation.status}
                       </Badge>
                     )}
                   </div>
 
-                  <div className="bg-muted/10 p-6 rounded-4xl space-y-6 border border-muted-foreground/5">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">เพิ่มรายการซ่อม/อะไหล่</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <Input
-                        placeholder="รายการ เช่น ล้างโซ่, อัดจาระบี"
-                        className="h-12 rounded-xl bg-background border-none focus-visible:ring-primary/20"
-                        value={newQItem.description}
-                        onChange={(e) =>
-                          setNewQItem({
-                            ...newQItem,
-                            description: e.target.value,
-                          })
-                        }
-                      />
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="ค่าแรง (บาท)"
-                        className="h-12 rounded-xl bg-background border-none focus-visible:ring-primary/20 font-bold"
-                        value={newQItem.labor === 0 ? "" : newQItem.labor}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === "" || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                  <div className="bg-muted/5 p-4 rounded-3xl space-y-4 border border-muted-foreground/5">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                      <div className="sm:col-span-8 space-y-1.5">
+                        <label className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 px-1">
+                          รายละเอียดงาน / สินค้า
+                        </label>
+                        <Input
+                          placeholder="เช่น ล้างโซ่, อัดจาระบี, ผ้าเบรค"
+                          className="h-11 rounded-xl bg-background border-none focus-visible:ring-primary/20 text-sm"
+                          value={newQItem.description}
+                          onChange={(e) =>
                             setNewQItem({
                               ...newQItem,
-                              labor: val === "" ? 0 : parseFloat(val),
-                            });
+                              description: e.target.value,
+                            })
                           }
-                        }}
-                      />
-                      <div className="sm:col-span-2 space-y-2">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 px-1">
-                          ค้นหาอะไหล่ (ระบุถ้ามี)
+                        />
+                      </div>
+                      <div className="sm:col-span-4 space-y-1.5">
+                        <label className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 px-1">ค่าแรง (บาท)</label>
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          className="h-11 rounded-xl bg-background border-none focus-visible:ring-primary/20 font-bold"
+                          value={newQItem.labor === 0 ? "" : newQItem.labor}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "" || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                              setNewQItem({
+                                ...newQItem,
+                                labor: val === "" ? 0 : parseFloat(val),
+                              });
+                            }
+                          }}
+                        />
+                      </div>
+
+                      <div className="sm:col-span-9 space-y-1.5">
+                        <label className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 px-1">
+                          เลือกอะไหล่ (ดึงราคาอัตโนมัติ)
                         </label>
-                        <Select value={newQItem.part_id} onValueChange={(val) => setNewQItem({ ...newQItem, part_id: val })}>
-                          <SelectTrigger className="h-12 rounded-xl bg-background border-none focus:ring-0">
-                            <SelectValue placeholder="พิมพ์ค้นหาหรือเลือกอะไหล่..." />
+                        <Select
+                          value={newQItem.part_id}
+                          onValueChange={(val) => {
+                            const p = allParts.find((ap: any) => ap.id === val);
+                            setNewQItem({ ...newQItem, part_id: val, description: p ? p.name : newQItem.description });
+                          }}
+                        >
+                          <SelectTrigger className="h-11 rounded-xl bg-background border-none focus:ring-0 text-sm">
+                            <SelectValue placeholder="ค้นหาอะไหล่..." />
                           </SelectTrigger>
                           <SelectContent className="max-h-[300px]">
-                            <div className="p-2 border-b bg-muted/20">
+                            <div className="p-2 border-b bg-muted/20 sticky top-0 z-10">
                               <Input
-                                placeholder="ค้นหาชื่ออะไหล่..."
-                                className="h-8 text-xs bg-background border-dashed"
-                                onChange={(e) => {}}
+                                placeholder="ค้นหา..."
+                                className="h-8 text-xs bg-background border-none shadow-sm"
+                                value={partSearch}
+                                onChange={(e) => setPartSearch(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
                               />
                             </div>
-                            <SelectItem value="none">— ไม่ใช้อะไหล่ —</SelectItem>
-                            {allParts.map((p: any) => (
-                              <SelectItem key={p.id} value={p.id}>
-                                <div className="flex justify-between gap-4">
-                                  <span>{p.name}</span>
-                                  <span className="text-primary opacity-60 font-bold">{formatCurrency(p.unit_price)}</span>
+                            <SelectItem value="none" className="text-xs">
+                              — ไม่ใช้อะไหล่ —
+                            </SelectItem>
+                            {filteredParts.map((p: any) => (
+                              <SelectItem key={p.id} value={p.id} className="cursor-pointer">
+                                <div className="flex justify-between items-center w-full gap-8 py-0.5">
+                                  <span className="font-semibold text-xs">{p.name}</span>
+                                  <span className="text-primary font-black text-xs">{formatCurrency(p.unit_price)}</span>
                                 </div>
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
-                      {newQItem.part_id && newQItem.part_id !== "none" && (
-                        <div className="sm:col-span-2 space-y-2 animate-in fade-in zoom-in-95 duration-300">
-                          <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 px-1">
-                            จำนวนอะไหล่ (Quotation)
-                          </label>
-                          <Input
-                            type="text"
-                            inputMode="numeric"
-                            className="h-12 rounded-xl bg-background border-none focus-visible:ring-primary/20 font-black text-center"
-                            value={newQItem.part_qty === 0 ? "" : newQItem.part_qty}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === "" || /^[0-9]*$/.test(val)) {
-                                setNewQItem({
-                                  ...newQItem,
-                                  part_qty: val === "" ? 0 : parseInt(val),
-                                });
-                              }
-                            }}
-                          />
-                        </div>
-                      )}
+
+                      <div className="sm:col-span-3 space-y-1.5">
+                        <label className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 px-1">จำนวน</label>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="1"
+                          className="h-11 rounded-xl bg-background border-none focus-visible:ring-primary/20 font-black text-center"
+                          value={newQItem.part_id && newQItem.part_id !== "none" ? newQItem.part_qty : ""}
+                          disabled={!newQItem.part_id || newQItem.part_id === "none"}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "" || /^[0-9]*$/.test(val)) {
+                              setNewQItem({
+                                ...newQItem,
+                                part_qty: val === "" ? 0 : parseInt(val),
+                              });
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
+
                     <Button
                       variant="outline"
-                      className="w-full h-11 rounded-xl border-dashed border-primary/20 text-primary font-bold hover:bg-primary/5"
+                      className="w-full h-10 rounded-xl border-dashed border-primary/20 text-primary font-bold hover:bg-primary/5 text-xs"
                       onClick={handleAddQuotationItem}
                     >
-                      <Plus className="w-4 h-4 mr-2" /> เพิ่มรายการ
+                      <Plus className="w-3.5 h-3.5 mr-2" /> เพิ่มรายการซ่อม
                     </Button>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    {quotationItems.length === 0 && (
+                      <div className="py-8 text-center bg-muted/5 rounded-3xl border border-dashed flex flex-col items-center gap-2 opacity-30">
+                        <FileSearch className="w-6 h-6" />
+                        <p className="text-[10px] font-bold uppercase tracking-widest">ยังไม่มีรายการในใบเสนอราคา</p>
+                      </div>
+                    )}
                     {quotationItems.map((item, idx) => (
                       <div
                         key={idx}
-                        className="flex items-center justify-between p-5 rounded-2xl bg-muted/20 border border-muted-foreground/5 group hover:bg-muted/30 transition-colors"
+                        className="flex items-center justify-between p-3 px-4 rounded-xl bg-muted/10 border border-muted-foreground/5 group hover:bg-muted/20 transition-all animate-in slide-in-from-right-2 duration-300"
                       >
-                        <div className="space-y-1">
-                          <p className="font-bold text-sm tracking-tight">{item.description}</p>
+                        <div className="flex flex-col">
+                          <p className="font-bold text-xs tracking-tight">{item.description}</p>
                           {item.part_id && (
-                            <Badge
-                              variant="secondary"
-                              className="text-[8px] font-black uppercase tracking-widest bg-primary/5 text-primary"
-                            >
-                              ITEM + PARTS x{item.part_qty}
-                            </Badge>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <Badge
+                                variant="outline"
+                                className="text-[8px] h-4 font-black uppercase tracking-tighter bg-primary/5 text-primary border-none p-0"
+                              >
+                                Spare Part x{item.part_qty}
+                              </Badge>
+                              {(() => {
+                                const p = allParts.find((ap: any) => ap.id === item.part_id);
+                                return p ? (
+                                  <span className="text-[9px] text-muted-foreground font-medium">
+                                    ({formatCurrency(Number(p.unit_price) * (item.part_qty || 1))})
+                                  </span>
+                                ) : null;
+                              })()}
+                            </div>
                           )}
                         </div>
-                        <div className="flex items-center gap-6">
-                          <p className="font-black text-blue-600 tracking-tight">{formatCurrency(item.labor)}</p>
+                        <div className="flex items-center gap-4">
+                          <p className="font-black text-blue-600 text-sm">{formatCurrency(item.labor)}</p>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 rounded-lg text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-7 w-7 rounded-lg text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-500/10"
                             onClick={() => handleRemoveQuotationItem(idx)}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </Button>
                         </div>
                       </div>
                     ))}
-
-                    {quotationItems.length > 0 && (
-                      <div className="p-6 rounded-4xl bg-blue-500/5 flex justify-between items-center mt-6">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600/60">รวมยอดเสนอราคา</p>
-                        <p className="text-3xl font-black text-blue-600 tracking-tighter">{formatCurrency(quotationTotal)}</p>
-                      </div>
-                    )}
                   </div>
 
-                  <div className="flex gap-3 pt-6">
-                    <Button
-                      className="flex-1 h-14 rounded-2xl font-black uppercase tracking-widest text-xs bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/20"
-                      onClick={handleSaveQuotation}
-                      disabled={loading || quotationItems.length === 0}
-                    >
-                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "ส่งใบเสนอราคาอย่างเป็นทางการ"}
-                    </Button>
-                    {existingQuotation && (
-                      <ExportPDFButton
-                        type="INVOICE"
-                        job={job}
-                        items={jobParts.map((pj: any) => ({
-                          part: pj.part,
-                          quantity: pj.quantity,
-                          unit_price: pj.part.price,
-                          price_total: pj.price_total,
-                        }))}
-                      />
+                  <div className="space-y-4">
+                    {quotationItems.length > 0 && (
+                      <div className="p-4 px-6 rounded-3xl bg-blue-500/5 border border-blue-500/10 flex justify-between items-center">
+                        <div>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-blue-600/60 mb-0.5">สรุปยอดที่เสนอ</p>
+                          <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">Subtotal Estimate</p>
+                        </div>
+                        <p className="text-2xl font-black text-blue-600 tracking-tighter">{formatCurrency(quotationTotal)}</p>
+                      </div>
                     )}
+
+                    <div className="flex gap-2">
+                      <Button
+                        className="flex-1 h-12 rounded-2xl font-black uppercase tracking-widest text-[10px] bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                        onClick={handleSaveQuotation}
+                        disabled={loading || quotationItems.length === 0}
+                      >
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "บันทึกและส่งใบเสนอราคา"}
+                      </Button>
+                      {existingQuotation && (
+                        <ExportPDFButton
+                          type="INVOICE"
+                          job={job}
+                          items={jobParts.map((pj: any) => ({
+                            part: pj.part,
+                            quantity: pj.quantity,
+                            unit_price: pj.part.price,
+                            price_total: pj.price_total,
+                          }))}
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
               </TabsContent>
@@ -923,15 +968,15 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
                   </div>
 
                   <div className="grid grid-cols-3 gap-4">
-                    <Card className="p-6 border-none bg-muted/10 rounded-[1.5rem] text-center">
+                    <Card className="p-6 border-none bg-muted/10 rounded-3xl text-center">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 mb-2">อะไหล่</p>
                       <p className="text-lg font-black tracking-tight">{formatCurrency(partsTotal)}</p>
                     </Card>
-                    <Card className="p-6 border-none bg-muted/10 rounded-[1.5rem] text-center">
+                    <Card className="p-6 border-none bg-muted/10 rounded-3xl text-center">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 mb-2">ค่าแรง</p>
                       <p className="text-lg font-black tracking-tight">{formatCurrency(parseFloat(laborCost || "0"))}</p>
                     </Card>
-                    <Card className="p-6 border-none bg-emerald-500/5 rounded-[1.5rem] text-center ring-1 ring-emerald-500/20">
+                    <Card className="p-6 border-none bg-emerald-500/5 rounded-3xl text-center ring-1 ring-emerald-500/20">
                       <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600/60 mb-2">รวมสุทธิ</p>
                       <p className="text-xl font-black text-emerald-600 tracking-tight">{formatCurrency(grandTotal)}</p>
                     </Card>
@@ -962,7 +1007,7 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
                             <ImageIcon className="w-4 h-4 text-primary" />
                             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">สลิปหลักฐานการโอน</p>
                           </div>
-                          <div className="relative aspect-[3/4] sm:aspect-[4/5] rounded-4xl overflow-hidden border bg-muted/10 group">
+                          <div className="relative aspect-3/4 sm:aspect-4/5 rounded-4xl overflow-hidden border bg-muted/10 group">
                             <img src={existingPayment.slip_url} alt="Slip" className="w-full h-full object-contain" />
                             <div className="absolute inset-x-0 bottom-0 p-6 bg-linear-to-t from-black/60 to-transparent flex justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                               <Button
@@ -1103,51 +1148,51 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
         </ScrollArea>
 
         {/* Action Footer */}
-        <div className="p-8 border-t bg-muted/20 flex flex-col sm:flex-row gap-4 shrink-0">
-          <div className="flex-1 flex gap-3">
+        <div className="p-5 px-8 border-t bg-muted/20 flex flex-col sm:flex-row gap-3 shrink-0">
+          <div className="flex-1 flex gap-2">
             {job.status === "created" && (
               <Button
                 className={cn(
-                  "h-14 flex-1 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-lg",
+                  "h-12 flex-1 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg",
                   job.customer_confirmed ? "bg-primary shadow-primary/20" : "bg-muted text-muted-foreground",
                 )}
                 disabled={loading || !job.customer_confirmed}
                 onClick={() => handleUpdateJob("in_progress", 10)}
               >
-                {job.customer_confirmed ? "▶ เริ่มดำเนินการซ่อม" : "⏳ รอลูกค้าอนุมัติ"}
+                {job.customer_confirmed ? "▶ เริ่มซ่อม" : "⏳ รอลูกค้าอนุมัติ"}
               </Button>
             )}
             {job.status === "in_progress" && (
               <>
                 <Button
                   variant="outline"
-                  className="h-14 flex-1 rounded-2xl font-black uppercase tracking-widest text-[10px] bg-background border-none shadow-sm"
+                  className="h-12 flex-1 rounded-xl font-black uppercase tracking-widest text-[9px] bg-background border-none shadow-sm"
                   onClick={() => handleUpdateJob(undefined, Math.min((job.progress || 0) + 20, 90))}
                   disabled={loading}
                 >
                   +20% Progress
                 </Button>
                 <Button
-                  className="h-14 flex-1 rounded-2xl font-black uppercase tracking-widest text-xs bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
+                  className="h-12 flex-1 rounded-xl font-black uppercase tracking-widest text-[10px] bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
                   onClick={() => handleUpdateJob("completed", 100)}
                   disabled={loading}
                 >
-                  ✓ ซ่อมเสร็จสมบูรณ์
+                  ✓ ซ่อมเสร็จ
                 </Button>
               </>
             )}
             {job.status === "completed" && (
               <Button
-                className="h-14 flex-1 rounded-2xl font-black uppercase tracking-widest text-xs bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                className="h-12 flex-1 rounded-xl font-black uppercase tracking-widest text-[10px] bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/20"
                 onClick={() => handleUpdateJob("delivered")}
                 disabled={loading}
               >
-                🚀 ส่งมอบรถให้ลูกค้า
+                🚀 ส่งมอบรถ
               </Button>
             )}
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <ExportPDFButton
               type="REPORT"
               job={job}
@@ -1158,21 +1203,9 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
                 price_total: pj.price_total,
               }))}
             />
-            {existingQuotation && (
-              <ExportPDFButton
-                type="INVOICE"
-                job={job}
-                items={jobParts.map((pj: any) => ({
-                  part: pj.part,
-                  quantity: pj.quantity,
-                  unit_price: pj.part.price,
-                  price_total: pj.price_total,
-                }))}
-              />
-            )}
             <Button
               variant="ghost"
-              className="h-14 px-10 rounded-2xl font-bold text-xs uppercase hover:bg-destructive/5 hover:text-destructive"
+              className="h-12 px-8 rounded-xl font-bold text-[10px] uppercase hover:bg-destructive/5 hover:text-destructive"
               disabled={loading}
               onClick={onClose}
             >

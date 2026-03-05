@@ -7,24 +7,19 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll() {},
+    const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
         },
+        setAll() {},
       },
-    );
+    });
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user)
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const role = user.user_metadata?.role;
 
@@ -52,11 +47,7 @@ export async function GET() {
       where: { user_id: user.id },
     });
 
-    if (!customer)
-      return NextResponse.json(
-        { message: "Customer not found" },
-        { status: 404 },
-      );
+    if (!customer) return NextResponse.json({ message: "Customer not found" }, { status: 404 });
 
     const quotations = await prisma.quotation.findMany({
       where: {
@@ -78,10 +69,7 @@ export async function GET() {
     return NextResponse.json(quotations);
   } catch (error) {
     console.error("Quotations GET error:", error);
-    return NextResponse.json(
-      { message: "Internal Server Error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -89,24 +77,19 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll() {},
+    const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
         },
+        setAll() {},
       },
-    );
+    });
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user)
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const role = user.user_metadata?.role;
     if (role !== "staff" && role !== "admin") {
@@ -116,15 +99,22 @@ export async function POST(request: Request) {
     const { booking_id, items } = await request.json();
 
     if (!booking_id || !items || items.length === 0) {
-      return NextResponse.json(
-        { message: "ข้อมูลไม่ครบถ้วน" },
-        { status: 400 },
-      );
+      return NextResponse.json({ message: "ข้อมูลไม่ครบถ้วน", errorCode: "MISSING_DATA" }, { status: 400 });
     }
 
-    // Calculate total_amount from items
+    // Fetch part prices if they are in the items
+    const partIds = items.filter((i: any) => i.part_id).map((i: any) => i.part_id);
+    const parts = await prisma.part.findMany({
+      where: { id: { in: partIds } },
+    });
+
+    const partsMap = new Map(parts.map((p) => [p.id, Number(p.price)]));
+
+    // Calculate total_amount from items (Labor + Parts)
     const total_amount = items.reduce((sum: number, item: any) => {
-      return sum + (item.labor || 0);
+      const labor = Number(item.labor || 0);
+      const partPrice = item.part_id ? (partsMap.get(item.part_id) || 0) * (item.part_qty || 1) : 0;
+      return sum + labor + partPrice;
     }, 0);
 
     // Create or update quotation using upsert
@@ -132,6 +122,7 @@ export async function POST(request: Request) {
       where: { booking_id },
       update: {
         total_amount,
+        status: "pending_customer_approval",
         items: {
           deleteMany: {},
           create: items.map((item: any) => ({
@@ -145,6 +136,7 @@ export async function POST(request: Request) {
       create: {
         booking: { connect: { id: booking_id } },
         total_amount,
+        status: "pending_customer_approval",
         items: {
           create: items.map((item: any) => ({
             description: item.description,
@@ -164,9 +156,6 @@ export async function POST(request: Request) {
     return NextResponse.json(quotation, { status: 201 });
   } catch (error) {
     console.error("Quotation POST error:", error);
-    return NextResponse.json(
-      { message: "Internal Server Error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ message: "Internal Server Error", errorCode: "INTERNAL_SERVER_ERROR" }, { status: 500 });
   }
 }

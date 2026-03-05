@@ -123,6 +123,11 @@ function SlipUploadModal({ payment, onClose }: { payment: Payment; onClose: () =
   const getAmount = (amount: any) => {
     if (typeof amount === "number") return amount;
     if (amount && typeof amount.toNumber === "function") return amount.toNumber();
+    if (amount && typeof amount === "object" && amount.d) {
+      // Logic to handle Decimal object serialized as JSON
+      const num = parseFloat(amount.toString());
+      return isNaN(num) ? 0 : num;
+    }
     const num = Number(amount);
     return isNaN(num) ? 0 : num;
   };
@@ -148,11 +153,19 @@ function SlipUploadModal({ payment, onClose }: { payment: Payment; onClose: () =
 
         <div className="p-8 space-y-6">
           {(payment.method === "TRANSFER" || payment.method === "QR_TRANSFER") && (
-            <Card className="border-none bg-primary/5 p-5 rounded-2xl">
-              <p className="text-[9px] font-black uppercase tracking-widest text-primary/60 mb-2">บัญชีรับโอนเงิน</p>
-              <p className="font-black text-sm tracking-tight">ธ.กสิกรไทย 123-4-56789-0</p>
-              <p className="text-xs font-bold text-muted-foreground opacity-60">ป่าโยวเย่ การช่าง จำกัด</p>
-            </Card>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Card className="flex-1 border-none bg-primary/5 p-5 rounded-2xl flex flex-col justify-center">
+                <p className="text-[9px] font-black uppercase tracking-widest text-primary/60 mb-2">บัญชีรับโอนเงิน</p>
+                <p className="font-black text-sm tracking-tight text-primary">ธ.กสิกรไทย 123-4-56789-0</p>
+                <p className="text-xs font-bold text-muted-foreground opacity-60">ป่าโยวเย่ การช่าง จำกัด</p>
+              </Card>
+              <Card className="w-full sm:w-32 h-32 border-none bg-white p-2 rounded-2xl overflow-hidden shadow-sm shrink-0 flex items-center justify-center group relative cursor-pointer">
+                <img src="/Rickrolling_QR_code.png" alt="Payment QR" className="w-full h-full object-contain" />
+                <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <span className="text-[8px] font-black uppercase tracking-tighter text-primary">SCAN ME</span>
+                </div>
+              </Card>
+            </div>
           )}
 
           <div className="space-y-4">
@@ -336,7 +349,7 @@ export default function PaymentsPage() {
                 const cfg = paymentStatusConfig[payment.status] || paymentStatusConfig.pending;
                 const Icon = cfg.icon;
                 const amountValue = getAmount(payment.amount);
-                const needsSlip = payment.status === "pending" && (payment.method === "TRANSFER" || payment.method === "QR_TRANSFER");
+                const needsSlip = payment.status === "pending";
                 const hasSlip = !!payment.slip_url;
 
                 return (
@@ -405,20 +418,21 @@ export default function PaymentsPage() {
                                   </Button>
                                 )}
 
-                                {!isStaff && payment.method === "CASH" && (
-                                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-4 py-3 bg-muted/40 rounded-xl border border-dashed text-center flex-1">
-                                    รอชำระที่เคาน์เตอร์
-                                  </p>
-                                )}
-
-                                {needsSlip && (
-                                  <Button
-                                    variant={hasSlip ? "outline" : "default"}
-                                    className="h-12 flex-1 sm:min-w-[140px] rounded-xl font-black uppercase tracking-widest text-xs"
-                                    onClick={() => setSelectedPayment(payment)}
-                                  >
-                                    {hasSlip ? "ตรวจสอบสลิป" : "แนบสลิป"}
-                                  </Button>
+                                {needsSlip && !isStaff && (
+                                  <div className="flex flex-col gap-2 flex-1">
+                                    {payment.method === "CASH" && !hasSlip && (
+                                      <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40 text-center">
+                                        หรือ ชำระออนไลน์ผ่านการโอนเงิน
+                                      </p>
+                                    )}
+                                    <Button
+                                      variant={hasSlip ? "outline" : "default"}
+                                      className="h-12 w-full rounded-xl font-black uppercase tracking-widest text-xs"
+                                      onClick={() => setSelectedPayment(payment)}
+                                    >
+                                      {hasSlip ? "ตรวจสอบสลิป" : "แนบสลิปชำระเงิน"}
+                                    </Button>
+                                  </div>
                                 )}
                               </div>
                             ) : (

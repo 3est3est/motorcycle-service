@@ -73,8 +73,10 @@ export default function EstimatesPage() {
 
   const updateEstimate = useMutation({
     mutationFn: async ({ estimateId, action }: { estimateId: string; action: "confirm" | "reject" }) => {
-      const res = await fetch(`/api/estimates/${estimateId}/${action}`, {
-        method: "POST",
+      const res = await fetch(`/api/estimates/${estimateId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
       });
       if (!res.ok) {
         const err = await res.json();

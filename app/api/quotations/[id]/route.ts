@@ -4,31 +4,23 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 // PATCH /api/quotations/[id] - ลูกค้า approve/reject ใบเสนอราคา (FR-18, BR-RULE-02)
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll() {},
+    const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
         },
+        setAll() {},
       },
-    );
+    });
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user)
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const { action } = await request.json(); // "approve" | "reject"
     if (!["approve", "reject"].includes(action)) {
@@ -50,11 +42,7 @@ export async function PATCH(
       },
     });
 
-    if (!quotation)
-      return NextResponse.json(
-        { message: "Quotation not found" },
-        { status: 404 },
-      );
+    if (!quotation) return NextResponse.json({ message: "Quotation not found" }, { status: 404 });
 
     const customer = await prisma.customer.findUnique({
       where: { user_id: user.id },
@@ -77,13 +65,28 @@ export async function PATCH(
           data: { status: "approved" },
         });
 
-        // Mark repair job as customer confirmed (unlock "start repair" button)
+        // 1. Calculate labor cost from quotation items
+        const totalLabor = quotation.items.reduce((sum, item) => sum + Number(item.labor), 0);
+
+        // 2. Mark or Create repair job
         if (quotation.booking.repair_job) {
           await tx.repairJob.update({
             where: { id: quotation.booking.repair_job.id },
             data: {
               customer_confirmed: true,
               quotation_id: id,
+              labor_cost: totalLabor,
+            },
+          });
+        } else {
+          // FR-19: Create repair job after quotation is approved
+          await tx.repairJob.create({
+            data: {
+              booking_id: quotation.booking_id,
+              quotation_id: id,
+              customer_confirmed: true,
+              status: "created",
+              labor_cost: totalLabor,
             },
           });
         }
@@ -103,18 +106,12 @@ export async function PATCH(
     }
   } catch (error) {
     console.error("Quotation PATCH error:", error);
-    return NextResponse.json(
-      { message: "Internal Server Error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ message: "Internal Server Error", errorCode: "INTERNAL_SERVER_ERROR" }, { status: 500 });
   }
 }
 
 // GET /api/quotations/[id] - ดูใบเสนอราคาเดี่ยว (รองรับทั้ง ID ใบเสนอราคา และ ID การจอง)
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const quotation = await prisma.quotation.findFirst({
@@ -134,15 +131,11 @@ export async function GET(
       },
     });
 
-    if (!quotation)
-      return NextResponse.json({ message: "Not found" }, { status: 404 });
+    if (!quotation) return NextResponse.json({ message: "Not found" }, { status: 404 });
 
     return NextResponse.json(quotation);
   } catch (error) {
     console.error("Quotation GET ERROR:", error);
-    return NextResponse.json(
-      { message: "Internal Server Error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
   }
 }

@@ -30,8 +30,11 @@ export async function GET(request: Request) {
 
     // Check role: must be staff or admin
     const userRole = user?.user_metadata?.role;
-    if (!user || (userRole !== "staff" && userRole !== "admin")) {
-      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    if (!user) {
+      return NextResponse.json({ message: "Unauthorized", errorCode: "UNAUTHORIZED" }, { status: 401 });
+    }
+    if (userRole !== "staff" && userRole !== "admin") {
+      return NextResponse.json({ message: "Forbidden", errorCode: "FORBIDDEN" }, { status: 403 });
     }
 
     // Staff sees everyone or just customers?
@@ -66,6 +69,6 @@ export async function GET(request: Request) {
     return NextResponse.json(users);
   } catch (error) {
     console.error("Staff fetch users error:", error);
-    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ message: "Internal Server Error", errorCode: "INTERNAL_SERVER_ERROR" }, { status: 500 });
   }
 }

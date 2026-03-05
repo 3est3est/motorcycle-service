@@ -6,6 +6,29 @@ import { cookies } from "next/headers";
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    const cookieStore = await cookies();
+    const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll() {},
+      },
+    });
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ message: "Unauthorized", errorCode: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    const role = user.user_metadata?.role;
+    if (role !== "staff" && role !== "admin") {
+      return NextResponse.json({ message: "Forbidden", errorCode: "FORBIDDEN" }, { status: 403 });
+    }
+
     const { status, progress, labor_cost, note, assigned_staff_id } = await request.json();
 
     // 1. Update Repair Job
