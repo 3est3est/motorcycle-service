@@ -43,3 +43,7 @@ next-env.d.ts
 SRS-2.md
 developmen_log.md
 OVERVIEW_FEATURES.md
+playwright-report/
+test-results/   
+playwright.config.ts
+
