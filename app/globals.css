@@ -119,6 +119,9 @@
   --color-info-foreground: var(--info-foreground);
 
   --font-sans: "Inter", "IBM Plex Sans Thai", "system-ui", sans-serif;
+
+  --z-60: 60;
+  --radius-4xl: 2rem;
 }
 
 @layer base {

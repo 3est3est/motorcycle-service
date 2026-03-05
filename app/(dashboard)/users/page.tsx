@@ -335,7 +335,7 @@ export default function UsersManagementPage() {
                       <CardContent className="p-10">
                         <div className="flex flex-col sm:flex-row gap-8 items-start justify-between">
                           <div className="flex gap-8 items-center flex-1 min-w-0">
-                            <Avatar className="w-24 h-24 rounded-[2rem] border-none shadow-premium ring-2 ring-background overflow-hidden bg-muted/20">
+                            <Avatar className="w-24 h-24 rounded-4xl border-none shadow-premium ring-2 ring-background overflow-hidden bg-muted/20">
                               <AvatarImage src={user.customer?.image_url} className="object-cover" />
                               <AvatarFallback className="bg-primary/5 text-primary/40">
                                 <CircleUserRound strokeWidth={1.5} className="w-12 h-12" />

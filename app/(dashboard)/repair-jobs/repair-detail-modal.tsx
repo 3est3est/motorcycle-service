@@ -881,7 +881,7 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
 
                   {existingPayment ? (
                     <div className="space-y-6">
-                      <div className="bg-muted/10 p-6 rounded-[2rem] space-y-4">
+                      <div className="bg-muted/10 p-6 rounded-4xl space-y-4">
                         <div className="flex justify-between items-center text-sm">
                           <span className="font-bold text-muted-foreground/60 uppercase tracking-widest text-[10px]">ช่องทางชำระเงิน</span>
                           <span className="font-black">
@@ -904,7 +904,7 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
                             <ImageIcon className="w-4 h-4 text-primary" />
                             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">สลิปหลักฐานการโอน</p>
                           </div>
-                          <div className="relative aspect-[3/4] sm:aspect-[4/5] rounded-[2rem] overflow-hidden border bg-muted/10 group">
+                          <div className="relative aspect-[3/4] sm:aspect-[4/5] rounded-4xl overflow-hidden border bg-muted/10 group">
                             <img src={existingPayment.slip_url} alt="Slip" className="w-full h-full object-contain" />
                             <div className="absolute inset-x-0 bottom-0 p-6 bg-linear-to-t from-black/60 to-transparent flex justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                               <Button
@@ -946,7 +946,7 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
 
                       {existingPayment.status === "success" && (
                         <div className="space-y-6">
-                          <div className="p-6 rounded-[2rem] bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-5">
+                          <div className="p-6 rounded-4xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-5">
                             <div className="w-12 h-12 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0">
                               <CheckCircle2 className="w-6 h-6" />
                             </div>
@@ -1029,7 +1029,7 @@ export function RepairDetailModal({ job, onClose }: RepairDetailModalProps) {
                           </div>
                         )
                       ) : (
-                        <div className="py-10 flex flex-col items-center gap-4 border-2 border-dashed rounded-[2rem] opacity-40">
+                        <div className="py-10 flex flex-col items-center gap-4 border-2 border-dashed rounded-4xl opacity-40">
                           <AlertCircle className="w-10 h-10" />
                           <p className="text-[10px] font-black uppercase tracking-widest max-w-[200px] leading-relaxed">
                             กรุณาระบุสถานะ "ซ่อมแล้ว" ก่อนทำการสร้างใบเรียกเก็บเงิน

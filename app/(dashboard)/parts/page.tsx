@@ -311,7 +311,7 @@ export default function PartsPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-[2rem] border border-white/5 shadow-premium bg-emerald-500/5 backdrop-blur-md overflow-hidden group">
+          <Card className="rounded-4xl border border-white/5 shadow-premium bg-emerald-500/5 backdrop-blur-md overflow-hidden group">
             <CardContent className="p-8 flex items-center gap-6">
               <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center transition-transform group-hover:scale-110 shadow-md">
                 <BarChart3 className="w-8 h-8" />
