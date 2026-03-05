@@ -77,6 +77,7 @@ export const partSchema = z.object({
   description: z.string().max(500).optional(),
   price: z.number().min(0, "ราคาต้องไม่ติดลบ"),
   stock_qty: z.number().int().min(0, "จำนวนต้องไม่ติดลบ"),
+  min_stock: z.number().int().min(0).optional().default(5),
   image_url: z.string().url().optional().or(z.literal("")),
 });
 

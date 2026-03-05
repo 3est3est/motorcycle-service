@@ -2,32 +2,41 @@
 
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard,
+  Compass,
   Calendar,
-  Wrench,
-  Package,
-  CreditCard,
-  Star,
+  Hammer,
+  Boxes,
+  ReceiptText,
+  Sparkles,
   Users,
   Settings,
-  ChevronLeft,
   Bike,
   LogOut,
   Menu,
-  X,
+  Files,
+  ChevronLeft,
+  ChevronRight,
+  CircleUserRound,
+  History,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Button } from "@/components/ui/button";
+import { useSidebar } from "@/components/providers/sidebar-provider";
+
 import { logoutAction } from "@/lib/actions/auth";
+import { useProfile } from "@/lib/hooks/use-profile";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 
 type UserRole = "customer" | "staff" | "admin";
 
 interface NavItem {
   href: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   roles: UserRole[];
 }
 
@@ -35,7 +44,7 @@ const navItems: NavItem[] = [
   {
     href: "/dashboard",
     label: "แดชบอร์ด",
-    icon: LayoutDashboard,
+    icon: Compass,
     roles: ["customer", "staff", "admin"],
   },
   {
@@ -57,27 +66,39 @@ const navItems: NavItem[] = [
     roles: ["customer", "staff", "admin"],
   },
   {
+    href: "/estimates",
+    label: "ใบประเมินราคา",
+    icon: Files,
+    roles: ["customer"],
+  },
+  {
+    href: "/quotations",
+    label: "ใบเสนอราคา",
+    icon: Files,
+    roles: ["customer", "staff", "admin"],
+  },
+  {
     href: "/repair-jobs",
     label: "งานซ่อม",
-    icon: Wrench,
+    icon: Hammer,
     roles: ["staff", "admin"],
   },
   {
     href: "/parts",
     label: "คลังอะไหล่",
-    icon: Package,
+    icon: Boxes,
     roles: ["staff", "admin"],
   },
   {
     href: "/payments",
     label: "การชำระเงิน",
-    icon: CreditCard,
+    icon: ReceiptText,
     roles: ["customer", "staff", "admin"],
   },
   {
     href: "/points",
     label: "คะแนนสะสม",
-    icon: Star,
+    icon: Sparkles,
     roles: ["customer"],
   },
   {
@@ -98,16 +119,18 @@ interface SidebarProps {
   role?: UserRole;
   userEmail?: string;
   userName?: string;
+  userId: string;
 }
 
-export function Sidebar({
-  role = "customer",
-  userEmail,
-  userName,
-}: SidebarProps) {
+export function Sidebar({ role: initialRole = "customer" }: SidebarProps) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { isCollapsed, toggle } = useSidebar();
+
+  // Use real-time profile data
+  const { data: profile } = useProfile();
+  const role = profile?.role || initialRole;
+  const userName = profile?.full_name;
 
   const filteredItems = navItems.filter((item) => item.roles.includes(role));
 
@@ -117,229 +140,192 @@ export function Sidebar({
     admin: "ผู้ดูแลระบบ",
   }[role];
 
-  return (
-    <>
-      {/* Mobile Toggle Button */}
-      <button
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-xl bg-sidebar text-white shadow-xl min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-sidebar/90 transition-all border border-white/10"
-        onClick={() => setMobileOpen(!mobileOpen)}
-        aria-label="เปิด/ปิดเมนู"
-      >
-        {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-      </button>
+  const SidebarInner = ({ onItemClick }: { onItemClick?: () => void }) => {
+    const [isPending, startTransition] = useTransition();
 
-      {/* Mobile Overlay */}
-      {mobileOpen && (
-        <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
+    const handleLogout = async () => {
+      if (isPending) return;
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+        startTransition(async () => {
+          try {
+            await logoutAction();
+          } catch (err) {
+            window.location.replace("/login");
+          }
+        });
+      } catch (err) {
+        window.location.replace("/login");
+      }
+    };
 
-      {/* Mobile Sidebar */}
-      <aside
-        className={cn(
-          "lg:hidden fixed inset-y-0 left-0 z-50 w-72 bg-sidebar transition-transform duration-500 ease-out",
-          mobileOpen ? "translate-x-0" : "-translate-x-full",
-        )}
-      >
-        <SidebarContent
-          role={role}
-          userName={userName}
-          roleLabel={roleLabel}
-          collapsed={false}
-          filteredItems={filteredItems}
-          pathname={pathname}
-          onItemClick={() => setMobileOpen(false)}
-        />
-      </aside>
+    return (
+      <div className="flex flex-col h-full bg-card relative">
+        {/* Toggle Button - Desktop Only */}
+        <button
+          onClick={toggle}
+          className={cn(
+            "hidden lg:flex absolute -right-3 top-24 w-6 h-6 rounded-full bg-primary text-primary-foreground items-center justify-center shadow-lg hover:scale-110 active:scale-90 transition-all duration-300 z-50 border-4 border-background group",
+          )}
+        >
+          {isCollapsed ? (
+            <ChevronRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
+          ) : (
+            <ChevronLeft className="w-3 h-3 transition-transform group-hover:-translate-x-0.5" />
+          )}
+        </button>
 
-      {/* Desktop Sidebar */}
-      <aside
-        className={cn(
-          "hidden lg:flex flex-col fixed inset-y-0 left-0 z-30",
-          "bg-sidebar transition-all duration-300 border-r border-sidebar-border/50",
-          collapsed ? "w-20" : "w-64",
-        )}
-      >
-        <SidebarContent
-          role={role}
-          userName={userName}
-          roleLabel={roleLabel}
-          collapsed={collapsed}
-          filteredItems={filteredItems}
-          pathname={pathname}
-          onToggleCollapse={() => setCollapsed(!collapsed)}
-        />
-      </aside>
-    </>
-  );
-}
+        {/* Brand Header */}
+        <div className={cn("p-8 transition-all duration-500", isCollapsed ? "px-4 overflow-hidden" : "px-8")}>
+          <Link href="/dashboard" className="flex items-center gap-4 group">
+            <div className="w-12 h-12 shrink-0 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground group-hover:rotate-6 transition-all duration-500 shadow-md">
+              <Bike className="w-7 h-7" />
+            </div>
+            {!isCollapsed && (
+              <div className="animate-in fade-in slide-in-from-left-2 duration-500">
+                <h1 className="font-black text-xl tracking-tighter leading-none group-hover:text-primary transition-colors">
+                  ป่าโยว์เย่ การช่าง
+                </h1>
+                <p className="text-[9px] uppercase font-black text-muted-foreground/50 mt-1.5 tracking-widest leading-none">
+                  COMMAND CENTER
+                </p>
+              </div>
+            )}
+          </Link>
+        </div>
 
-function SidebarContent({
-  userName,
-  roleLabel,
-  collapsed,
-  filteredItems,
-  pathname,
-  onItemClick,
-  onToggleCollapse,
-}: any) {
-  const [isPending, startTransition] = useTransition();
+        <div className={cn("flex-1 py-8 overflow-y-auto space-y-1.5 transition-all duration-500", isCollapsed ? "px-3" : "px-4")}>
+          {filteredItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <Button
+                key={item.href}
+                asChild
+                variant={isActive ? "secondary" : "ghost"}
+                className={cn(
+                  "w-full justify-start gap-4 h-11 text-[13px] font-black uppercase tracking-widest transition-all duration-300 rounded-xl group/btn overflow-hidden",
+                  isCollapsed ? "px-0 justify-center" : "px-4",
+                  isActive
+                    ? "bg-primary text-white shadow-md hover:bg-primary/90"
+                    : "text-muted-foreground/60 hover:text-primary hover:bg-primary/5 active:scale-95",
+                )}
+                onClick={onItemClick}
+              >
+                <Link href={item.href}>
+                  <Icon
+                    className={cn("w-5 h-5 shrink-0 transition-all duration-500", isActive ? "scale-110" : "group-hover/btn:scale-110")}
+                    strokeWidth={isActive ? 3 : 2}
+                  />
+                  {!isCollapsed && <span className="animate-in fade-in slide-in-from-left-2 duration-300">{item.label}</span>}
+                  {isActive && !isCollapsed && <div className="absolute left-0 top-0 bottom-0 w-1 bg-white/20" />}
+                </Link>
+              </Button>
+            );
+          })}
+        </div>
 
-  const handleLogout = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (isPending) return;
-
-    try {
-      // 1. Clear all client-side storage
-      localStorage.clear();
-      sessionStorage.clear();
-
-      // Clear cookies client-side
-      document.cookie.split(";").forEach((c) => {
-        document.cookie = c
-          .replace(/^ +/, "")
-          .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-      });
-
-      // 2. Clear server-side session using Server Action
-      startTransition(async () => {
-        try {
-          await logoutAction();
-        } catch (err) {
-          // Even if server action fails (e.g. redirect error), force a hard location change
-          window.location.replace("/login");
-        }
-      });
-    } catch (err) {
-      console.error("Logout error:", err);
-      window.location.replace("/login");
-    }
+        {/* User Card & Logout */}
+        <div className={cn("mt-auto transition-all duration-500", isCollapsed ? "p-3" : "p-4")}>
+          <div
+            className={cn(
+              "p-4 rounded-2xl bg-muted/20 border border-muted-foreground/5 mb-4 group/user transition-all duration-500 backdrop-blur-sm",
+              isCollapsed ? "p-2 mb-2" : "p-4 mb-4",
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <Avatar className="h-9 w-9 shrink-0 shadow-md ring-2 ring-background group-hover/user:ring-primary/20 transition-all">
+                <AvatarImage src={profile?.image_url} className="object-cover" />
+                <AvatarFallback className="bg-primary/5 text-primary/40">
+                  <CircleUserRound strokeWidth={2.5} className="w-5 h-5 font-black" />
+                </AvatarFallback>
+              </Avatar>
+              {!isCollapsed && (
+                <div className="min-w-0 flex-1 animate-in fade-in slide-in-from-left-2 duration-500">
+                  <p className="text-sm font-black truncate leading-tight">{userName ?? "ผู้ใช้งาน"}</p>
+                  <p className="text-[9px] font-black text-muted-foreground/40 uppercase tracking-widest mt-1">{roleLabel}</p>
+                </div>
+              )}
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            className={cn(
+              "w-full justify-start gap-3 text-destructive/50 hover:text-destructive hover:bg-destructive/5 h-11 rounded-xl transition-all duration-300 group/logout",
+              isCollapsed && "px-0 justify-center",
+            )}
+            onClick={handleLogout}
+            disabled={isPending}
+          >
+            <LogOut className="w-4 h-4 shrink-0 transition-transform group-hover/logout:-translate-x-1" />
+            {!isCollapsed && (
+              <span className="text-xs font-black uppercase tracking-widest animate-in fade-in slide-in-from-left-2 duration-300">
+                {isPending ? "กำลังออก..." : "ออกจากระบบ"}
+              </span>
+            )}
+          </Button>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground border-r border-sidebar-border/50">
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-6 border-b border-sidebar-border/50">
-        <div className="shrink-0 w-10 h-10 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20 ring-1 ring-white/10">
-          <Bike className="w-6 h-6 text-white" />
-        </div>
-        {!collapsed && (
-          <div className="min-w-0 flex-1">
-            <p className="font-black text-sidebar-foreground text-base tracking-tight leading-none mb-1">
-              ป่าโยว์เย่
-            </p>
-            <p className="text-[10px] uppercase font-bold tracking-widest text-sidebar-muted">
-              Repair Management
-            </p>
+    <>
+      {/* Mobile Top Bar / Trigger */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-card z-40 px-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground">
+            <Bike className="w-5 h-5" />
           </div>
-        )}
-        {onToggleCollapse && (
-          <button
-            className="p-2 rounded-xl text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-foreground/5 transition-all hidden lg:flex"
-            onClick={onToggleCollapse}
-          >
-            <ChevronLeft
-              className={cn(
-                "w-4 h-4 transition-transform duration-500",
-                collapsed && "rotate-180",
-              )}
-            />
-          </button>
-        )}
+          <span className="font-bold text-sm tracking-tight text-foreground">ป่าโยว์เย่ การช่าง</span>
+        </div>
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon">
+              <Menu className="w-5 h-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0 w-72 border-none">
+            <SheetHeader className="sr-only">
+              <SheetTitle>เมนูนำทาง</SheetTitle>
+            </SheetHeader>
+            <SidebarInner onItemClick={() => setMobileOpen(false)} />
+          </SheetContent>
+        </Sheet>
       </div>
 
-      {/* User Profiles */}
-      <div className={cn("px-4 py-6", collapsed && "px-2")}>
-        <div
-          className={cn(
-            "flex items-center gap-3 p-2 rounded-2xl bg-sidebar-foreground/5 border border-sidebar-border/50",
-            collapsed && "justify-center p-1 bg-transparent border-none",
-          )}
-        >
-          <div className="shrink-0 w-10 h-10 rounded-xl bg-linear-to-tr from-primary/40 to-primary/10 flex items-center justify-center ring-1 ring-sidebar-border/20 overflow-hidden">
-            <span className="text-sm font-black text-sidebar-foreground">
-              {userName?.[0]?.toUpperCase() ?? "U"}
-            </span>
-          </div>
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-sidebar-foreground truncate">
-                {userName ?? "ผู้ใช้งาน"}
-              </p>
-              <p className="text-[10px] font-bold text-sidebar-muted uppercase tracking-tighter">
-                {roleLabel}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Nav Link List */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto scrollbar-hide">
-        <ul className="menu menu-md gap-1 p-0">
-          {filteredItems.map((item: any) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  onClick={onItemClick}
-                  className={cn(
-                    "flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-300",
-                    isActive
-                      ? "bg-primary text-white shadow-lg shadow-primary/20 font-bold"
-                      : "text-sidebar-muted hover:bg-sidebar-foreground/5 hover:text-sidebar-foreground",
-                    collapsed && "justify-center px-0 h-10 w-10 mx-auto",
-                  )}
-                >
-                  <Icon
-                    className={cn(
-                      "w-5 h-5 shrink-0 transition-transform",
-                      isActive && "stroke-[2.5]",
-                    )}
-                  />
-                  {!collapsed && (
-                    <span className="text-sm tracking-tight">{item.label}</span>
-                  )}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      {/* Action Footer */}
-      <div
+      <aside
         className={cn(
-          "p-4 border-t border-sidebar-border/50",
-          collapsed && "p-2",
+          "hidden lg:flex fixed inset-y-0 left-0 bg-card flex-col z-50 transition-all duration-500 ease-in-out",
+          isCollapsed ? "w-20" : "w-64",
         )}
       >
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={isPending}
-          className={cn(
-            "btn btn-ghost w-full justify-start gap-4 rounded-2xl normal-case hover:bg-rose-500/10 hover:text-rose-500 transition-all group",
-            collapsed &&
-              "btn-square p-0 h-10 w-10 min-h-0 mx-auto justify-center",
-            isPending && "loading",
-          )}
-        >
-          {!isPending && (
-            <LogOut className="w-5 h-5 shrink-0 group-hover:-translate-x-1 transition-transform" />
-          )}
-          {!collapsed && (
-            <span className="text-sm font-bold tracking-tight">
-              {isPending ? "กำลังออก..." : "ออกจากระบบ"}
-            </span>
-          )}
-        </button>
-      </div>
-    </div>
+        <SidebarInner />
+      </aside>
+
+      {/* Mobile Bottom Navigation (NFR-09: One-finger access) */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-card/80 backdrop-blur-lg z-50 px-4 flex items-center justify-around pb-safe">
+        {filteredItems.slice(0, 4).map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex flex-col items-center gap-1 min-w-[64px] transition-all active:scale-90",
+                isActive ? "text-primary" : "text-muted-foreground",
+              )}
+            >
+              <div className={cn("p-1.5 rounded-lg", isActive && "bg-primary/10")}>
+                <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-tighter">{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+    </>
   );
 }

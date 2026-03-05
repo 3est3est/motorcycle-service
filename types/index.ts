@@ -2,18 +2,11 @@ export type UserRole = "customer" | "staff" | "admin";
 
 export type BookingStatus = "pending" | "confirmed" | "cancelled" | "completed";
 
-export type RepairJobStatus =
-  | "created"
-  | "in_progress"
-  | "completed"
-  | "delivered";
+export type RepairJobStatus = "created" | "in_progress" | "completed" | "delivered";
 
 export type PaymentMethod = "CASH" | "TRANSFER" | "QR_TRANSFER";
 
-export type QuotationStatus =
-  | "pending_customer_approval"
-  | "approved"
-  | "rejected";
+export type QuotationStatus = "pending_customer_approval" | "approved" | "rejected";
 
 // User & Auth
 export interface User {
@@ -28,6 +21,7 @@ export interface Customer {
   user_id: string;
   full_name: string;
   phone: string;
+  image_url?: string;
   created_at: string;
   user?: User;
   motorcycles?: Motorcycle[];

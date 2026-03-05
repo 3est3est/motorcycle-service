@@ -23,6 +23,8 @@ export const viewport = {
 import { cookies } from "next/headers";
 import { QueryProvider } from "@/components/providers/query-provider";
 
+import { Toaster } from "@/components/ui/sonner";
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -34,7 +36,10 @@ export default async function RootLayout({
   return (
     <html lang="th" className={theme === "dark" ? "dark" : ""}>
       <body className="antialiased min-h-screen bg-background">
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          {children}
+          <Toaster position="top-center" richColors />
+        </QueryProvider>
       </body>
     </html>
   );

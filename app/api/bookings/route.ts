@@ -150,6 +150,23 @@ export async function POST(request: Request) {
       },
     });
 
+    // Notify all staff
+    const staff = await prisma.user.findMany({
+      where: { role: { in: ["admin", "staff"] } },
+      select: { id: true },
+    });
+
+    if (staff.length > 0) {
+      await prisma.notification.createMany({
+        data: staff.map((s) => ({
+          user_id: s.id,
+          title: "มีการจองบริการใหม่",
+          message: `จองใหม่จากคุณ ${customer.full_name} (${motorcycle.brand} ${motorcycle.model})`,
+          type: "BOOKING_NEW",
+        })),
+      });
+    }
+
     return NextResponse.json(booking, { status: 201 });
   } catch (error) {
     console.error(error);

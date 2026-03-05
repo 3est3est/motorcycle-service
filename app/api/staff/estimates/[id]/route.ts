@@ -40,6 +40,21 @@ export async function POST(
         description,
         estimated_cost,
       },
+      include: {
+        booking: {
+          include: { customer: true },
+        },
+      },
+    });
+
+    // Notify Customer (FR-24)
+    await prisma.notification.create({
+      data: {
+        user_id: estimate.booking.customer.user_id,
+        title: "ใบประเมินราคามาแล้ว!",
+        message: `รถของคุณ (${estimate.booking.motorcycle_id.slice(-6).toUpperCase()}) มีใบประเมินราคาพร้อมให้คุณตรวจสอบแล้ว`,
+        type: "INFO",
+      },
     });
 
     return NextResponse.json(estimate);

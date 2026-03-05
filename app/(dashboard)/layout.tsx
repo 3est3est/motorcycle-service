@@ -1,34 +1,27 @@
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/layout/sidebar";
+import { RealtimeProvider } from "@/components/providers/realtime-provider";
+import { SidebarProvider } from "@/components/providers/sidebar-provider";
+import { DashboardMain } from "@/components/layout/dashboard-main";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import type { UserRole } from "@/types";
 
-export default async function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options),
-          );
-        },
+  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
       },
     },
-  );
+  });
 
   const {
     data: { user: authUser },
@@ -42,8 +35,7 @@ export default async function DashboardLayout({
 
   // Get role and display name from DB or metadata
   let role: UserRole = "customer";
-  let userName =
-    authUser.user_metadata?.full_name ?? authUser.email ?? "ผู้ใช้งาน";
+  let userName = authUser.user_metadata?.full_name ?? authUser.email ?? "ผู้ใช้งาน";
   let userEmail = authUser.email ?? "";
 
   try {
@@ -58,13 +50,11 @@ export default async function DashboardLayout({
         customer: {
           upsert: {
             create: {
-              full_name:
-                meta?.full_name ?? authUser.email?.split("@")[0] ?? "ผู้ใช้งาน",
+              full_name: meta?.full_name ?? authUser.email?.split("@")[0] ?? "ผู้ใช้งาน",
               phone: meta?.phone ?? "",
             },
             update: {
-              full_name:
-                meta?.full_name ?? authUser.email?.split("@")[0] ?? "ผู้ใช้งาน",
+              full_name: meta?.full_name ?? authUser.email?.split("@")[0] ?? "ผู้ใช้งาน",
               phone: meta?.phone ?? "",
             },
           },
@@ -76,8 +66,7 @@ export default async function DashboardLayout({
         role: (meta?.role as UserRole) ?? "customer",
         customer: {
           create: {
-            full_name:
-              meta?.full_name ?? authUser.email?.split("@")[0] ?? "ผู้ใช้งาน",
+            full_name: meta?.full_name ?? authUser.email?.split("@")[0] ?? "ผู้ใช้งาน",
             phone: meta?.phone ?? "",
           },
         },
@@ -91,18 +80,31 @@ export default async function DashboardLayout({
       userName = dbUser.customer.full_name;
     }
     userEmail = dbUser.email;
+
+    return (
+      <RealtimeProvider userId={authUser.id} userRole={role} customerId={dbUser.customer?.id}>
+        <SidebarProvider>
+          <div className="min-h-screen bg-background text-foreground">
+            <Sidebar role={role} userName={userName} userEmail={userEmail} userId={authUser.id} />
+            <DashboardMain>{children}</DashboardMain>
+          </div>
+        </SidebarProvider>
+      </RealtimeProvider>
+    );
   } catch (error) {
     console.error("Dashboard layout sync error:", error);
     // Fallback to metadata if DB fails completely
     role = (authUser.user_metadata?.role as UserRole) ?? "customer";
-  }
 
-  return (
-    <div className="min-h-screen bg-background">
-      <Sidebar role={role} userName={userName} userEmail={userEmail} />
-      <main className={cn("transition-all duration-300", "lg:pl-64")}>
-        {children}
-      </main>
-    </div>
-  );
+    return (
+      <RealtimeProvider userId={authUser.id} userRole={role}>
+        <SidebarProvider>
+          <div className="min-h-screen bg-background text-foreground">
+            <Sidebar role={role} userName={userName} userEmail={userEmail} userId={authUser.id} />
+            <DashboardMain>{children}</DashboardMain>
+          </div>
+        </SidebarProvider>
+      </RealtimeProvider>
+    );
+  }
 }

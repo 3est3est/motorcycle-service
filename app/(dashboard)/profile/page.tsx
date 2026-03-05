@@ -1,208 +1,212 @@
 "use client";
+import { useState } from "react";
 
-import { useEffect, useState } from "react";
 import { TopBar } from "@/components/layout/topbar";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { User, Phone, Mail, Lock, Loader2, Save, ShieldCheck, CircleUserRound, IdCard, Camera } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ImageUpload } from "@/components/ui/image-upload";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  User,
-  Phone,
-  Mail,
-  Lock,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  Save,
-} from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function ProfilePage() {
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
 
-  const [form, setForm] = useState({
-    email: "",
-    full_name: "",
-    phone: "",
+  const { data: form = { email: "", full_name: "", phone: "", image_url: "" }, isLoading } = useQuery({
+    queryKey: ["profile"],
+    queryFn: async () => {
+      const res = await fetch("/api/profile");
+      if (!res.ok) throw new Error("Failed to fetch profile");
+      const data = await res.json();
+      setImageUrl(data.image_url || "");
+      return data;
+    },
   });
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await fetch("/api/profile");
-        if (res.ok) {
-          const data = await res.json();
-          setForm(data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch profile", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProfile();
-  }, []);
+  const [imageUrl, setImageUrl] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setSuccess(false);
-    setError("");
-
-    try {
+  const updateProfile = useMutation({
+    mutationFn: async (updatedData: { full_name: string; phone: string; image_url: string }) => {
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          full_name: form.full_name,
-          phone: form.phone,
-        }),
+        body: JSON.stringify(updatedData),
       });
-
-      if (res.ok) {
-        setSuccess(true);
-        setTimeout(() => setSuccess(false), 3000);
-      } else {
-        const data = await res.json();
-        setError(data.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
       }
-    } catch (err) {
-      setError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
-    } finally {
-      setSubmitting(false);
-    }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      toast.success("บันทึกข้อมูลส่วนตัวเรียบร้อยแล้ว");
+    },
+    onError: (err: any) => {
+      toast.error(err.message);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    updateProfile.mutate({
+      full_name: formData.get("full_name") as string,
+      phone: formData.get("phone") as string,
+      image_url: imageUrl,
+    });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary mb-2" />
-        <p className="text-muted-foreground">กำลังโหลดข้อมูลโปรไฟล์...</p>
+      <div className="max-w-4xl mx-auto px-6 py-12 space-y-8">
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-48" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <Card className="rounded-[2.5rem] border-none shadow-sm">
+          <CardHeader className="p-10">
+            <Skeleton className="h-12 w-12 rounded-2xl" />
+          </CardHeader>
+          <CardContent className="p-10 pt-0 space-y-10">
+            <div className="grid grid-cols-2 gap-10">
+              <div className="space-y-4">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-14 w-full rounded-2xl" />
+              </div>
+              <div className="space-y-4">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-14 w-full rounded-2xl" />
+              </div>
+            </div>
+            <Skeleton className="h-14 w-40 rounded-2xl ml-auto" />
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="animate-fade-in pb-10">
-      <TopBar
-        title="ตั้งค่าบัญชี"
-        subtitle="จัดการข้อมูลส่วนตัวและความปลอดภัยของคุณ"
-      />
+    <div className="animate-fluid pb-20 max-w-4xl mx-auto">
+      <TopBar title="โปรไฟล์" subtitle="จัดการข้อมูลส่วนตัวและความปลอดภัย" />
 
-      <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <Card className="border-border/50 shadow-sm overflow-hidden">
-            <CardHeader className="bg-muted/30 border-b border-border/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                  <User className="w-5 h-5" />
+      <div className="px-6 space-y-10 mt-8">
+        <form onSubmit={handleSubmit} className="space-y-10">
+          <Card className="rounded-[2.5rem] border-none shadow-premium overflow-hidden bg-card/50">
+            <CardHeader className="p-10 pb-8 bg-muted/20 border-b">
+              <div className="flex flex-col md:flex-row items-center gap-10">
+                <div className="relative group">
+                  <div className="w-32 h-32 rounded-[2.5rem] overflow-hidden bg-primary/5 ring-4 ring-background shadow-premium transition-transform group-hover:scale-[1.02]">
+                    <ImageUpload value={imageUrl} onChange={setImageUrl} folder="profiles" />
+                  </div>
+                  <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center shadow-lg border-4 border-background pointer-events-none group-hover:scale-110 transition-transform">
+                    <Camera className="w-4 h-4" />
+                  </div>
                 </div>
-                <div>
-                  <CardTitle className="text-lg">ข้อมูลส่วนตัว</CardTitle>
-                  <CardDescription>
-                    ข้อมูลที่ใช้ในการติดต่อและการออกใบเสร็จ
+                <div className="text-center md:text-left">
+                  <CardTitle className="text-2xl font-black uppercase tracking-tight">ข้อมูลส่วนตัว</CardTitle>
+                  <CardDescription className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 mt-1">
+                    ข้อมูลนี้จะถูกใช้ในการติดต่อและออกใบเสร็จรับเงิน
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-6 space-y-4">
-              {error && (
-                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  {error}
-                </div>
-              )}
-              {success && (
-                <div className="p-3 rounded-lg bg-success/10 border border-success/20 text-success text-sm flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  บันทึกข้อมูลเรียบร้อยแล้ว
-                </div>
-              )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-muted-foreground" />
-                    อีเมล (ไม่สามารถเปลี่ยนได้)
-                  </label>
+            <CardContent className="p-10 space-y-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8">
+                <div className="space-y-3">
+                  <Label className="text-[10px] font-black uppercase tracking-[0.25em] text-muted-foreground/60 px-1 flex items-center gap-2">
+                    <Mail className="w-3.5 h-3.5" /> อีเมลส่วนตัว (แก้ไขไม่ได้)
+                  </Label>
                   <Input
-                    value={form.email}
+                    defaultValue={form.email}
                     disabled
-                    className="bg-muted/50 border-border/50"
+                    className="h-14 rounded-2xl bg-muted/30 border-none font-bold text-sm opacity-50 cursor-not-allowed px-6"
                   />
                 </div>
 
-                <Input
-                  label="ชื่อ-นามสกุล"
-                  name="full_name"
-                  value={form.full_name}
-                  placeholder="เช่น สมชาย ใจดี"
-                  onChange={(e) =>
-                    setForm({ ...form, full_name: e.target.value })
-                  }
-                  icon={<User className="w-4 h-4" />}
-                />
+                <div className="space-y-3">
+                  <Label className="text-[10px] font-black uppercase tracking-[0.25em] text-muted-foreground/60 px-1 flex items-center gap-2">
+                    <IdCard className="w-3.5 h-3.5" /> ชื่อ-นามสกุล
+                  </Label>
+                  <Input
+                    name="full_name"
+                    defaultValue={form.full_name}
+                    placeholder="ระบุชื่อ-นามสกุลจริง"
+                    className="h-14 rounded-2xl bg-muted/10 border-none focus-visible:ring-primary/20 transition-all font-bold text-sm px-6"
+                    required
+                  />
+                </div>
 
-                <Input
-                  label="เบอร์โทรศัพท์"
-                  name="phone"
-                  value={form.phone}
-                  placeholder="08xxxxxxxx"
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  icon={<Phone className="w-4 h-4" />}
-                />
+                <div className="space-y-3">
+                  <Label className="text-[10px] font-black uppercase tracking-[0.25em] text-muted-foreground/60 px-1 flex items-center gap-2">
+                    <Phone className="w-3.5 h-3.5" /> เบอร์โทรศัพท์มือถือ
+                  </Label>
+                  <Input
+                    name="phone"
+                    defaultValue={form.phone}
+                    placeholder="08xxxxxxxx"
+                    className="h-14 rounded-2xl bg-muted/10 border-none focus-visible:ring-primary/20 transition-all font-bold text-sm px-6"
+                    required
+                  />
+                </div>
               </div>
 
-              <div className="flex justify-end pt-4">
+              <div className="flex justify-end pt-8 border-t">
                 <Button
                   type="submit"
-                  disabled={submitting}
-                  className="gap-2 min-w-[140px]"
+                  disabled={updateProfile.isPending}
+                  className="h-14 px-12 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95"
                 >
-                  {submitting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                  {updateProfile.isPending ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    <Save className="w-4 h-4" />
+                    <>
+                      <Save className="w-5 h-5 mr-3" strokeWidth={2.5} />
+                      บันทึกการเปลี่ยนแปลง
+                    </>
                   )}
-                  {submitting ? "กำลังบันทึก..." : "บันทึกข้อมูล"}
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-border/50 shadow-sm opacity-60">
-            <CardHeader className="bg-muted/30 border-b border-border/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-muted-foreground/10 text-muted-foreground">
-                  <Lock className="w-5 h-5" />
+          <Card className="rounded-[2.5rem] border-none shadow-sm opacity-60 bg-muted/10 group transition-all hover:opacity-100">
+            <CardHeader className="p-10 border-b">
+              <div className="flex items-center gap-6">
+                <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center text-muted-foreground">
+                  <ShieldCheck className="w-8 h-8" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg">ความปลอดภัย</CardTitle>
-                  <CardDescription>
-                    จัดการรหัสผ่านของคุณ (Coming Soon)
+                  <CardTitle className="text-2xl font-black uppercase tracking-tight">ความปลอดภัย</CardTitle>
+                  <CardDescription className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 mt-1">
+                    ระบบการเปลี่ยนรหัสผ่าน (กำลังพัฒนา)
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-6">
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-50">
-                  <Input label="รหัสผ่านเดิม" type="password" disabled />
-                  <Input label="รหัสผ่านใหม่" type="password" disabled />
+            <CardContent className="p-10 space-y-10 pointer-events-none">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <div className="space-y-3 opacity-40">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 px-1">รหัสผ่านปัจจุบัน</Label>
+                  <Input type="password" disabled className="h-14 rounded-2xl bg-muted border-none" />
                 </div>
-                <Button variant="outline" disabled className="gap-2">
-                  <Lock className="w-4 h-4" />
-                  เปลี่ยนรหัสผ่าน
-                </Button>
+                <div className="space-y-3 opacity-40">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 px-1">รหัสผ่านใหม่</Label>
+                  <Input type="password" disabled className="h-14 rounded-2xl bg-muted border-none" />
+                </div>
               </div>
+              <Button
+                disabled
+                className="h-14 px-10 rounded-2xl font-black uppercase tracking-widest text-[10px] bg-muted text-muted-foreground border-none"
+              >
+                <Lock className="w-4 h-4 mr-3" />
+                อัปเดตรหัสผ่านใหม่
+              </Button>
             </CardContent>
           </Card>
         </form>

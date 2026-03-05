@@ -50,7 +50,29 @@ export async function POST(
     const updated = await prisma.repairJob.update({
       where: { id },
       data: { customer_confirmed: true },
+      include: {
+        booking: {
+          include: { customer: true, motorcycle: true },
+        },
+      },
     });
+
+    // Notify all staff/admin (FR-25)
+    const staffs = await prisma.user.findMany({
+      where: { role: { in: ["admin", "staff"] } },
+      select: { id: true },
+    });
+
+    for (const s of staffs) {
+      await prisma.notification.create({
+        data: {
+          user_id: s.id,
+          title: "ลูกค้ายืนยันงานซ่อมแล้ว!",
+          message: `ลูกค้า ${updated.booking.customer.full_name} ยืนยันงานซ่อมรถ ${updated.booking.motorcycle.model} (${updated.booking.motorcycle.license_plate}) พร้อมเริ่มงานทันที`,
+          type: "SUCCESS",
+        },
+      });
+    }
 
     return NextResponse.json(updated);
   } catch (error) {

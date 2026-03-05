@@ -1,10 +1,6 @@
 "use client";
-
 import { useState } from "react";
 import { TopBar } from "@/components/layout/topbar";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Calendar,
   Wrench,
@@ -15,504 +11,442 @@ import {
   CheckCircle2,
   AlertCircle,
   Bike,
-  Users,
   Package,
   Hammer,
-  Loader2,
   DollarSign,
+  FileText,
+  FileSearch,
+  TrendingUp,
+  ArrowRight,
+  Plus,
+  Users,
 } from "lucide-react";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
-import { RepairStatusModal } from "./repair-status-modal";
+import { useProfile } from "@/lib/hooks/use-profile";
 import { cn, formatCurrency } from "@/lib/utils";
-
-const bookingStatusConfig = {
-  pending: { label: "รอยืนยัน", variant: "pending" as const, icon: Clock },
-  confirmed: {
-    label: "ยืนยันแล้ว",
-    variant: "confirmed" as const,
-    icon: CheckCircle2,
-  },
-  cancelled: {
-    label: "ยกเลิก",
-    variant: "cancelled" as const,
-    icon: AlertCircle,
-  },
-  completed: {
-    label: "เสร็จสิ้น",
-    variant: "completed" as const,
-    icon: CheckCircle2,
-  },
-};
-
-const statusConfig: Record<string, { label: string; variant: any; icon: any }> =
-  {
-    created: { label: "รอซ่อม/รอยืนยันราคา", variant: "warning", icon: Clock },
-    in_progress: {
-      label: "กำลังดำเนินการซ่อม",
-      variant: "confirmed",
-      icon: Wrench,
-    },
-    completed: {
-      label: "ซ่อมเสร็จสิ้น",
-      variant: "completed",
-      icon: CheckCircle2,
-    },
-    delivered: { label: "ส่งมอบรถแล้ว", variant: "outline", icon: Package },
-  };
+import { RepairStatusModal } from "./repair-status-modal";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [selectedRepairId, setSelectedRepairId] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data: profile } = useProfile();
+
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
       const res = await fetch("/api/dashboard/stats");
-      if (!res.ok) throw new Error("Failed to fetch dashboard stats");
+      if (!res.ok) throw new Error("Could not fetch dashboard data");
       return res.json();
     },
-    refetchInterval: 10000,
   });
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
-        <p className="text-muted-foreground font-bold animate-pulse uppercase tracking-widest text-xs">
-          กำลังโหลดความก้าวหน้าของคุณ...
-        </p>
+      <div className="p-6 space-y-6 animate-pulse-fast">
+        <Skeleton className="h-10 w-48 mb-8" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-32 rounded-xl" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Skeleton className="lg:col-span-2 h-[400px] rounded-xl" />
+          <Skeleton className="h-[400px] rounded-xl" />
+        </div>
       </div>
     );
   }
 
-  const { stats, listData, customerName, activeRepairs = [] } = data;
-  const isCustomer = !!data.activeRepairs;
-  const isStaff = !isCustomer;
+  if (isError || !data) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] gap-6 text-center">
+        <Card className="max-w-md w-full border-destructive/20 bg-destructive/5">
+          <CardHeader>
+            <AlertCircle className="w-10 h-10 text-destructive mx-auto mb-2" />
+            <CardTitle className="text-destructive">เกิดข้อผิดพลาด</CardTitle>
+            <CardDescription>{error instanceof Error ? error.message : "ไม่สามารถโหลดข้อมูลแดชบอร์ดได้"}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => window.location.reload()} variant="outline" className="w-full">
+              ลองใหม่อีกครั้ง
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const { stats, listData, customerName, activeRepairs = [], revenueChart = [] } = data;
+  const isCustomer = Array.isArray(data.activeRepairs);
 
   return (
-    <div className="animate-fade-in space-y-8 pb-10">
-      <TopBar
-        title="แดชบอร์ด"
-        subtitle={`สวัสดีคุณ ${customerName} • ${isStaff ? "พนักงาน" : "ลูกค้า"}`}
-      />
+    <div className="animate-fluid pb-20 max-w-7xl mx-auto">
+      <TopBar title="แดชบอร์ด" subtitle={`สวัสดีคุณ ${customerName}`} />
 
-      <div className="p-4 sm:p-10 space-y-14">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          <MetricCard
-            label="คิวที่ยืนยัน"
+      <div className="px-6 space-y-8 mt-4">
+        {/* Metric Stats Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard
+            title="การจองที่รอยืนยัน"
             value={stats.confirmedBookings}
+            description="รายการที่รอการตรวจสอบ"
             icon={Calendar}
-            variant="primary"
-            sub="เตรียมเข้ารับบริการ"
-            href={!isCustomer ? "/admin" : "/bookings"}
-            className="accent-glow"
+            color="text-indigo-500"
+            delay="delay-0"
           />
-          <MetricCard
-            label="งานซ่อม"
+          <StatCard
+            title="งานซ่อมที่กำลังดำเนินการ"
             value={stats.activeRepairs}
-            icon={Hammer}
-            variant="warning"
-            sub={
-              isCustomer && stats.activeRepairs > 0
-                ? "มีงานซ่อมเคลื่อนไหว!"
-                : "ติดตามสถานะล่าสุด"
-            }
-            href={!isCustomer ? "/repair-jobs" : undefined}
-            onClick={() => {
-              if (isCustomer && activeRepairs.length > 0) {
-                setSelectedRepairId(activeRepairs[0].id);
-              }
-            }}
-            className={cn(
-              "accent-glow-wa",
-              isCustomer &&
-                stats.activeRepairs > 0 &&
-                "ring-2 ring-warning ring-offset-4 ring-offset-background",
-            )}
+            description="ช่างกำลังลงมือซ่อม"
+            icon={Wrench}
+            color="text-amber-500"
+            delay="delay-75"
           />
-          <MetricCard
-            label="ยอดค้างชำระ"
-            value={!isCustomer ? stats.inventory : stats.pendingPayments}
-            icon={!isCustomer ? Package : CreditCard}
-            variant="danger"
-            sub={!isCustomer ? "อะไหล่สต็อกต่ำ" : "ใบแจ้งหนี้ใหม่"}
-            href={!isCustomer ? "/parts" : "/payments"}
-            className="accent-glow"
+          <StatCard
+            title={isCustomer ? "รอชำระเงิน" : "อะไหล่ในคลัง"}
+            value={isCustomer ? stats.pendingPayments : stats.inventory}
+            description={isCustomer ? "ยอดค้างชำระทั้งหมด" : "จำนวนรายการอะไหล่"}
+            icon={isCustomer ? CreditCard : Package}
+            color={isCustomer ? "text-rose-500" : "text-cyan-500"}
+            alert={isCustomer && stats.pendingPayments > 0}
+            delay="delay-150"
           />
-          <MetricCard
-            label={!isCustomer ? "รายรับรวม" : "คะแนนสะสม"}
-            value={
-              !isCustomer
-                ? formatCurrency(stats.loyaltyPoints)
-                : stats.loyaltyPoints
-            }
-            icon={!isCustomer ? DollarSign : Star}
-            variant="success"
-            sub={!isCustomer ? "จากยอดที่ชำระสำเร็จ" : "แต้มสะสมทั้งหมด"}
-            href={!isCustomer ? "/payments" : "/points"}
-            className="accent-glow-su"
+          <StatCard
+            title={isCustomer ? "คะแนนสะสม" : "รายได้ทั้งหมด"}
+            value={isCustomer ? stats?.loyaltyPoints || 0 : formatCurrency(stats?.totalRevenue || 0)}
+            description="คำนวณแบบเรียลไทม์"
+            icon={isCustomer ? Star : DollarSign}
+            color="text-emerald-500"
+            delay="delay-200"
           />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-8">
+            {/* Revenue Trends (Staff & Admin) */}
+            {!isCustomer && revenueChart.length > 0 && (
+              <Card className="border-none shadow-premium bg-card/60 backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-300 delay-150">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-7">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+                      <TrendingUp className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm font-black uppercase tracking-[0.2em] text-emerald-600">แนวโน้มรายได้</CardTitle>
+                      <CardDescription className="text-[10px] font-bold opacity-40 uppercase tracking-widest mt-0.5">
+                        ผลประกอบการ 7 วันล่าสุด
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] font-black tracking-widest uppercase py-1 border-muted-foreground/10 bg-muted/20"
+                  >
+                    REAL-TIME DATA
+                  </Badge>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-48 flex items-end gap-3 px-2 pt-4">
+                    {(() => {
+                      const max = Math.max(...revenueChart.map((d: any) => d.amount), 1);
+                      return revenueChart.map((d: any, i: number) => {
+                        const height = (d.amount / max) * 100;
+                        return (
+                          <div key={i} className="group relative flex-1 flex flex-col items-center gap-3">
+                            <div className="absolute -top-12 scale-0 group-hover:scale-100 transition-all duration-300 bg-emerald-600 text-white font-black text-[10px] px-3 py-2 rounded-xl z-10 shadow-xl shadow-emerald-500/20 pointer-events-none">
+                              {formatCurrency(d.amount)}
+                            </div>
+                            <div
+                              className="w-full bg-emerald-500/10 group-hover:bg-emerald-500/40 rounded-t-xl transition-all duration-700 ease-out border-x border-t border-transparent group-hover:border-emerald-500/20"
+                              style={{ height: `${height}%` }}
+                            >
+                              <div className="w-full h-full bg-linear-to-t from-emerald-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-t-xl" />
+                            </div>
+                            <span className="text-[9px] font-black text-muted-foreground/40 uppercase truncate w-full text-center group-hover:text-emerald-600 transition-colors">
+                              {d.date}
+                            </span>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Active Repairs Section */}
             {isCustomer && activeRepairs.length > 0 && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-black flex items-center gap-3 uppercase tracking-tight">
-                    <div className="w-2 h-8 bg-warning rounded-full" />
-                    รถที่อยู่ระหว่างดำเนินการ ({activeRepairs.length})
-                  </h3>
-                </div>
+              <div className="space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground/40 px-1">งานซ่อมที่กำลังดำเนินการ</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {activeRepairs.map((rj: any) => (
-                    <Card
+                  {activeRepairs.map((rj: any, idx: number) => (
+                    <div
                       key={rj.id}
-                      className="glass-card overflow-hidden border-none shadow-xl hover:shadow-2xl transition-all cursor-pointer group active:scale-[0.98]"
+                      className="p-6 rounded-3xl bg-card/60 backdrop-blur-sm shadow-premium hover:bg-primary/5 transition-premium group animate-in fade-in slide-in-from-bottom-2 duration-200 cursor-pointer"
+                      style={{ animationDelay: `${idx * 50}ms` }}
                       onClick={() => setSelectedRepairId(rj.id)}
                     >
-                      <CardContent className="p-0">
-                        <div className="p-6 space-y-4">
-                          <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform overflow-hidden shadow-inner">
-                                {rj.booking?.motorcycle?.image_url ? (
-                                  <img
-                                    src={rj.booking.motorcycle.image_url}
-                                    alt="Bike"
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <Bike className="w-6 h-6" />
-                                )}
-                              </div>
-                              <div>
-                                <p className="font-black text-lg leading-tight tracking-tight">
-                                  {rj.booking.motorcycle.brand}{" "}
-                                  {rj.booking.motorcycle.model}
-                                </p>
-                                <p className="text-[10px] font-bold text-muted-foreground uppercase mt-0.5 tracking-widest">
-                                  ทะเบียน {rj.booking.motorcycle.license_plate}
-                                </p>
-                              </div>
-                            </div>
-                            {!rj.customer_confirmed && rj.booking.estimate && (
-                              <Badge
-                                variant="warning"
-                                className="animate-pulse font-black text-[9px] uppercase px-2 py-0.5 rounded-lg shadow-sm shadow-warning/20"
-                              >
-                                รอยืนยันราคา
-                              </Badge>
-                            )}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-2xl bg-muted/50 flex items-center justify-center text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-premium">
+                            <Bike className="w-6 h-6" />
                           </div>
-
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-end">
-                              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground opacity-50">
-                                สถานะการซ่อม
-                              </span>
-                              <span className="text-sm font-black text-primary">
-                                {rj.progress}%
-                              </span>
-                            </div>
-                            <div className="h-2 w-full bg-secondary/30 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-primary rounded-full transition-all duration-1000 ease-out"
-                                style={{ width: `${rj.progress}%` }}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between pt-2 border-t border-border/10">
-                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase">
-                                {statusConfig[rj.status]?.label || rj.status}
-                              </span>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-[10px] font-black uppercase text-primary hover:bg-primary/5 p-0"
-                            >
-                              รายละเอียด{" "}
-                              <ChevronRight className="w-3 h-3 ml-0.5" />
-                            </Button>
+                          <div className="min-w-0">
+                            <p className="font-black text-sm truncate group-hover:text-primary transition-colors">
+                              {rj.booking.motorcycle.model}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground/50 font-black uppercase tracking-widest">
+                              {rj.booking.motorcycle.license_plate}
+                            </p>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
+                        <Badge variant="outline" className="text-[10px] h-6 px-2.5 font-black border-primary/20 bg-primary/5 text-primary">
+                          {rj.progress}%
+                        </Badge>
+                      </div>
+                      <Progress value={rj.progress} className="h-2 rounded-full overflow-hidden bg-muted/50 shadow-inner" />
+                      <div className="mt-5 flex items-center justify-between">
+                        <span className="text-[10px] font-black text-muted-foreground/60 uppercase tracking-widest">
+                          {rj.status === "in_progress" ? "กำลังซ่อม" : rj.status === "completed" ? "ซ่อมเสร็จแล้ว" : "รอการประเมิน"}
+                        </span>
+                        <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 group-hover:text-primary transition-all pb-0.5" />
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
             )}
 
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-primary" />
-                  {!isCustomer
-                    ? "รายการจองที่รอดำเนินการ"
-                    : "ประวัติการจองล่าสุด"}
-                </h3>
-                <Link href={!isCustomer ? "/admin" : "/bookings"}>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-primary font-bold hover:bg-primary/5"
-                  >
-                    ดูทั้งหมด <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </Link>
-              </div>
-
-              <Card className="card-minimal overflow-hidden border-none shadow-none">
-                <CardContent className="p-0">
-                  {listData.length === 0 ? (
-                    <div className="py-20 text-center flex flex-col items-center justify-center space-y-3 opacity-40">
-                      <Calendar className="w-16 h-16 stroke-[1.5]" />
-                      <p className="text-sm font-medium">
-                        ไม่มีรายการในรายการแสดงขณะนี้
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-border/30">
-                      {listData.map((item: any) => (
-                        <div
-                          key={item.id}
-                          className="p-5 flex items-center justify-between hover:bg-white/5 transition-colors group"
-                        >
-                          <div className="flex items-center gap-4 min-w-0">
-                            <div className="w-12 h-12 rounded-2xl bg-secondary flex items-center justify-center shrink-0 shadow-inner group-hover:scale-110 transition-transform overflow-hidden">
-                              {item.motorcycle?.image_url ? (
-                                <img
-                                  src={item.motorcycle.image_url}
-                                  alt="Motorcycle"
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <Bike className="w-6 h-6 text-muted-foreground/70" />
-                              )}
+            {/* List Data Section (Table) */}
+            <Card className="border-none shadow-premium bg-card/50 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300 delay-150">
+              <CardHeader className="flex flex-row items-center justify-between p-6 pb-4">
+                <div>
+                  <CardTitle className="text-sm font-black uppercase tracking-[0.2em] text-muted-foreground/60 leading-none">
+                    {isCustomer ? "ประวัติการจองล่าสุด" : "คิวที่รอการตรวจสอบ"}
+                  </CardTitle>
+                  <p className="text-[10px] font-bold text-muted-foreground/30 uppercase mt-1.5 tracking-widest">อัปเดตสถานะแบบเรียลไทม์</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className="h-10 rounded-xl px-4 text-[11px] font-black uppercase tracking-[0.2em] text-primary hover:bg-primary/5 transition-premium active:scale-95"
+                >
+                  <Link href={isCustomer ? "/bookings" : "/admin"}>
+                    จัดการทั้งหมด <ArrowRight className="w-3 h-3 ml-2" />
+                  </Link>
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader className="bg-muted/30 border-none">
+                    <TableRow className="border-none hover:bg-transparent">
+                      <TableHead className="text-[9px] font-black uppercase tracking-[0.2em] h-12 pl-8">ข้อมูลผู้จอง / ยานพาหนะ</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase tracking-[0.2em] h-12">วันนัดหมาย</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase tracking-[0.2em] h-12">สถานะปัจจุบัน</TableHead>
+                      <TableHead className="w-[80px] h-12"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {listData.map((item: any, idx: number) => (
+                      <TableRow
+                        key={item.id}
+                        className="hover:bg-muted/40 cursor-pointer group border-none transition-colors duration-300"
+                        onClick={() => router.push(isCustomer ? "/bookings" : "/admin")}
+                      >
+                        <TableCell className="py-5 pl-8">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-premium">
+                              <Bike className="w-5 h-5" />
                             </div>
                             <div className="min-w-0">
-                              <p className="font-bold text-base truncate">
-                                {!isCustomer
-                                  ? item.customer?.full_name
-                                  : `${item.motorcycle?.brand} ${item.motorcycle?.model}`}
+                              <p className="font-black text-sm tracking-tight truncate leading-tight group-hover:text-primary transition-colors">
+                                {isCustomer ? `${item.motorcycle?.brand} ${item.motorcycle?.model}` : item.customer?.full_name}
                               </p>
-                              <p className="text-xs text-muted-foreground font-medium flex items-center gap-2">
-                                {format(
-                                  new Date(item.booking_time),
-                                  "d MMM yyyy",
-                                  { locale: th },
-                                )}
-                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-                                {format(
-                                  new Date(item.booking_time),
-                                  "HH:mm น.",
-                                  {
-                                    locale: th,
-                                  },
-                                )}
+                              <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest mt-1">
+                                {item.motorcycle?.license_plate || "ไม่ระบุทะเบียน"}
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            {isCustomer && item.repair && (
-                              <Button
-                                size="sm"
-                                variant="warning"
-                                className="h-8 rounded-lg text-[10px] font-black uppercase px-3 shadow-md shadow-warning/20 border-none"
-                                onClick={() =>
-                                  setSelectedRepairId(item.repair.id)
-                                }
-                              >
-                                ติดตามสถานะ
-                              </Button>
-                            )}
-                            <Badge
-                              className={`px-4 py-1 rounded-xl font-bold uppercase tracking-wider text-[10px] ${
-                                bookingStatusConfig[
-                                  item.status as keyof typeof bookingStatusConfig
-                                ]?.variant === "pending"
-                                  ? "badge-pending"
-                                  : bookingStatusConfig[
-                                        item.status as keyof typeof bookingStatusConfig
-                                      ]?.variant === "confirmed"
-                                    ? "badge-confirmed"
-                                    : bookingStatusConfig[
-                                          item.status as keyof typeof bookingStatusConfig
-                                        ]?.variant === "completed"
-                                      ? "badge-completed"
-                                      : "badge-cancelled"
-                              }`}
-                            >
-                              {bookingStatusConfig[
-                                item.status as keyof typeof bookingStatusConfig
-                              ]?.label || item.status}
-                            </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="text-xs font-black text-foreground/80">
+                              {format(new Date(item.booking_time), "dd MMMM", {
+                                locale: th,
+                              })}
+                            </p>
+                            <p className="text-[10px] font-black text-primary/60 uppercase tracking-widest">
+                              {format(new Date(item.booking_time), "HH:mm")} น.
+                            </p>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="secondary"
+                            className={cn(
+                              "text-[8px] font-black uppercase tracking-[0.15em] px-3 py-1 border-none shadow-sm",
+                              item.status === "pending" && "bg-amber-500/15 text-amber-600",
+                              item.status === "confirmed" && "bg-sky-500/15 text-sky-600",
+                              item.status === "cancelled" && "bg-rose-500/15 text-rose-600",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "w-1.5 h-1.5 rounded-full mr-2",
+                                item.status === "pending" && "bg-amber-500 animate-pulse",
+                                item.status === "confirmed" && "bg-sky-500",
+                                item.status === "cancelled" && "bg-rose-500",
+                              )}
+                            />
+                            {item.status === "pending"
+                              ? "รอเจ้าหน้าที่ยืนยัน"
+                              : item.status === "confirmed"
+                                ? "ยืนยันคิวแล้ว"
+                                : item.status === "cancelled"
+                                  ? "ยกเลิกคิวแล้ว"
+                                  : item.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right pr-8">
+                          <div className="w-8 h-8 rounded-lg bg-muted/0 group-hover:bg-muted/80 flex items-center justify-center transition-premium active:scale-90">
+                            <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-primary transition-colors" />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {listData.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="h-60 text-center">
+                          <div className="flex flex-col items-center gap-3 opacity-20">
+                            <Clock className="w-10 h-10" />
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em]">ไม่มีรายการที่รอดำเนินการ</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </div>
 
+          {/* Sidebar / Quick Actions */}
           <div className="lg:col-span-4 space-y-8">
             <div className="space-y-4">
-              <h3 className="text-lg font-bold">เข้าถึงด่วน</h3>
-              <div className="grid grid-cols-2 gap-4">
-                {!isCustomer ? (
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">เมนูทางลัด</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <QuickAction icon={Calendar} label="จองซ่อม" href={isCustomer ? "/bookings" : "/admin"} />
+                <QuickAction icon={Bike} label="รถของฉัน" href="/motorcycles" />
+                {isCustomer && (
                   <>
-                    <ActionButton
-                      label="รับคิวจอง"
-                      href="/admin"
-                      icon={Calendar}
-                    />
-                    <ActionButton label="อะไหล่" href="/parts" icon={Package} />
-                    <ActionButton
-                      label="งานซ่อม"
-                      href="/repair-jobs"
-                      icon={Wrench}
-                    />
-                    <ActionButton
-                      label="ผู้ใช้งาน"
-                      href="/users"
-                      icon={Users}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <ActionButton
-                      label="จองคิวใหม่"
-                      href="/bookings"
-                      icon={Calendar}
-                    />
-                    <ActionButton
-                      label="รถของฉัน"
-                      href="/motorcycles"
-                      icon={Bike}
-                    />
-                    <ActionButton
-                      label="จ่ายเงิน"
-                      href="/payments"
-                      icon={CreditCard}
-                    />
-                    <ActionButton label="เช็คแต้ม" href="/points" icon={Star} />
+                    <QuickAction icon={FileText} label="ใบประเมิน" href="/estimates" badge={stats.pendingEstimates} />
+                    <QuickAction icon={FileSearch} label="ใบเสนอราคา" href="/quotations" badge={stats.pendingQuotations} />
                   </>
                 )}
+                <QuickAction icon={CreditCard} label="ชำระเงิน" href="/payments" badge={isCustomer ? stats.pendingPayments : undefined} />
+                <QuickAction
+                  icon={isCustomer ? Star : Users}
+                  label={isCustomer ? "คะแนนสะสม" : "ผู้ใช้งาน"}
+                  href={isCustomer ? "/points" : "/users"}
+                />
               </div>
             </div>
 
-            <div className="card-minimal p-7 overflow-hidden relative group accent-glow active-bounce">
-              <div className="relative z-10 space-y-6 text-center">
-                <div className="inline-flex p-5 rounded-[2.5rem] bg-primary/10 text-primary transition-transform group-hover:scale-110 group-hover:rotate-3 duration-500">
-                  <Star className="w-12 h-12 opacity-80" />
-                </div>
-                <div className="space-y-2">
-                  <h4 className="font-bold text-2xl tracking-tight">
-                    Loyalty Rewards
-                  </h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed px-4 opacity-70">
-                    สะสมแต้มทุกการใช้จ่าย 100 บาท รับ 10 แต้ม
-                    เพื่อแลกรับส่วนลดสุดพิเศษ
-                  </p>
-                </div>
-                <Link href="/points" className="block pt-2">
-                  <button className="btn btn-primary btn-md rounded-2xl w-full font-bold shadow-xl shadow-primary/20 active-bounce">
-                    สำรวจรางวัล
-                  </button>
-                </Link>
+            {/* Promotion / Announcement Card */}
+            <Card className="bg-primary text-primary-foreground border-none shadow-lg shadow-primary/20 overflow-hidden relative group">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                <Star className="w-24 h-24 rotate-12" />
               </div>
-            </div>
+              <CardHeader className="relative pb-2">
+                <Badge variant="secondary" className="w-fit mb-2 bg-white/20 text-white border-none hover:bg-white/30 backdrop-blur-sm">
+                  โปรโมชั่นพิเศษ
+                </Badge>
+                <CardTitle className="text-xl font-black">สิทธิพิเศษระดับพรีเมียม</CardTitle>
+              </CardHeader>
+              <CardContent className="relative space-y-6 pt-0">
+                <p className="text-xs font-medium text-white/80 leading-relaxed">
+                  สะสมแต้มทุกครั้งที่ใช้บริการเพื่อรับส่วนลดสูงสุด 50% หรือแลกอะไหล่ฟรี!
+                </p>
+                <Button variant="secondary" className="w-full font-bold h-11 bg-white text-primary hover:bg-white/90" asChild>
+                  <Link href="/points">เริ่มต้นสะสมแต้ม</Link>
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
 
-      <RepairStatusModal
-        repairId={selectedRepairId}
-        onClose={() => setSelectedRepairId(null)}
-      />
+      <RepairStatusModal repairId={selectedRepairId} onClose={() => setSelectedRepairId(null)} />
     </div>
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  icon: Icon,
-  sub,
-  href,
-  onClick,
-  variant,
-  className,
-}: any) {
-  const colors = {
-    primary: "text-blue-600 bg-blue-500/10 border-blue-500/20",
-    warning: "text-amber-600 bg-amber-500/10 border-amber-500/20",
-    danger: "text-rose-600 bg-rose-500/10 border-rose-500/20",
-    success: "text-emerald-600 bg-emerald-500/10 border-emerald-500/20",
-  };
-
-  const Content = (
-    <div className="stat px-8 py-8 relative z-10">
-      <div
-        className={`stat-figure p-4 rounded-3xl ${colors[variant as keyof typeof colors]} transition-all duration-700 group-hover:scale-110 group-hover:rotate-3 group-hover:bg-opacity-20`}
-      >
-        <Icon className="w-10 h-10 stroke-[1.25]" />
-      </div>
-      <div className="stat-desc font-black text-[11px] uppercase tracking-[0.3em] text-muted-foreground/50 mb-3">
-        {label}
-      </div>
-      <div className="stat-value text-4xl font-black tracking-tight flex items-baseline gap-1">
-        {value}
-        <span className="text-xs font-bold text-muted-foreground ml-1">
-          รายการ
-        </span>
-      </div>
-      <div className="stat-desc mt-4 flex items-center gap-1.5 opacity-60 font-bold text-xs">
-        {sub}{" "}
-        <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1.5 transition-all" />
-      </div>
-    </div>
-  );
-
-  const cardClasses = cn(
-    "glass-card border border-border/10 bg-card/10 backdrop-blur-xl p-0.5 rounded-[2rem] overflow-hidden group transition-liquid active-bounce cursor-pointer",
-    className,
-  );
-
-  if (onClick) {
-    return (
-      <div onClick={onClick} className={cardClasses}>
-        {Content}
-      </div>
-    );
-  }
-
+function StatCard({ title, value, description, icon: Icon, color, delay }: any) {
   return (
-    <Link href={href || "#"} className={cardClasses}>
-      {Content}
-    </Link>
+    <Card
+      className={cn(
+        "border border-white/5 shadow-premium bg-card/40 backdrop-blur-md transition-premium hover:-translate-y-1 overflow-hidden group animate-in fade-in slide-in-from-bottom-2 duration-300 rounded-4xl",
+        delay,
+      )}
+    >
+      <CardContent className="p-8">
+        <div className="flex items-start justify-between">
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 leading-none">{title}</p>
+              <p
+                className={cn(
+                  "text-3xl font-black tracking-tighter leading-none group-hover:text-primary transition-colors",
+                  color.replace("text-", "text-opacity-80 text-"),
+                )}
+              >
+                {value}
+              </p>
+            </div>
+            <p className="text-[10px] font-bold text-muted-foreground/30 uppercase tracking-widest leading-none">{description}</p>
+          </div>
+          <div
+            className={cn(
+              "w-14 h-14 rounded-2xl flex items-center justify-center bg-muted/20 border border-muted-foreground/5 shadow-inner transition-premium group-hover:scale-105",
+              color.replace("text-", "text-"),
+            )}
+          >
+            <Icon className="w-7 h-7 font-black opacity-80" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
-function ActionButton({ label, href, icon: Icon }: any) {
+function QuickAction({ icon: Icon, label, href, badge }: any) {
   return (
     <Link
       href={href}
-      className="btn btn-ghost h-auto py-8 flex flex-col gap-5 rounded-[2rem] bg-secondary/5 border border-border/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-liquid active-bounce group"
+      className="flex flex-col items-center justify-center p-6 rounded-4xl border border-white/5 bg-card/40 backdrop-blur-md hover:bg-primary/5 transition-premium active:scale-95 group shadow-premium hover:-translate-y-0.5 animate-in fade-in zoom-in-95 duration-300"
     >
-      <div className="w-14 h-14 rounded-[1.5rem] bg-white dark:bg-black/20 shadow-sm border border-border/5 flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg group-hover:bg-primary/20 group-hover:text-primary">
-        <Icon className="w-7 h-7 stroke-[1.25]" />
+      {badge > 0 && (
+        <Badge className="absolute top-4 right-4 h-5 min-w-5 px-1 bg-primary text-primary-foreground font-black text-[9px] rounded-full z-10 border-none shadow-md">
+          {badge}
+        </Badge>
+      )}
+      <div className="p-4 rounded-2xl bg-muted/40 group-hover:bg-primary/10 transition-premium mb-4 text-muted-foreground group-hover:text-primary">
+        <Icon className="w-7 h-7 transition-premium group-hover:scale-110" />
       </div>
-      <span className="text-[11px] font-black text-muted-foreground group-hover:text-primary tracking-[0.2em] uppercase">
+      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 group-hover:text-primary transition-colors text-center line-clamp-1 px-1">
         {label}
       </span>
     </Link>

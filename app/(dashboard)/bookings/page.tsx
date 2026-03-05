@@ -2,23 +2,33 @@
 
 import { useEffect, useState } from "react";
 import { TopBar } from "@/components/layout/topbar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
-  Calendar,
+  Calendar as CalendarIcon,
   Plus,
   Clock,
   Bike,
-  MapPin,
   AlertCircle,
   Loader2,
   ChevronRight,
   ClipboardList,
+  CheckCircle2,
+  XCircle,
+  CalendarDays,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { bookingSchema, type BookingInput } from "@/lib/validations";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { format, addDays } from "date-fns";
+import { th } from "date-fns/locale";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 
 interface Motorcycle {
   id: string;
@@ -35,48 +45,136 @@ interface Booking {
   motorcycle: Motorcycle;
 }
 
-const statusConfig: Record<string, { label: string; variant: any }> = {
-  pending: { label: "รอยืนยัน", variant: "pending" },
-  confirmed: { label: "ยืนยันแล้ว", variant: "confirmed" },
-  cancelled: { label: "ยกเลิก", variant: "cancelled" },
-  completed: { label: "เสร็จสิ้น", variant: "completed" },
+interface AvailabilitySlot {
+  time: string;
+  label: string;
+  available: boolean;
+  bookingCount: number;
+}
+
+const statusConfig: Record<string, { label: string; color: string }> = {
+  pending: {
+    label: "รอยืนยัน",
+    color: "text-amber-500 bg-amber-50 dark:bg-amber-900/10",
+  },
+  confirmed: {
+    label: "ยืนยันแล้ว",
+    color: "text-emerald-500 bg-emerald-50 dark:bg-emerald-900/10",
+  },
+  cancelled: {
+    label: "ยกเลิก",
+    color: "text-rose-500 bg-rose-50 dark:bg-rose-900/10",
+  },
+  completed: {
+    label: "เสร็จสิ้น",
+    color: "text-blue-500 bg-blue-50 dark:bg-blue-900/10",
+  },
 };
 
+const AVAILABLE_HOURS = [8, 9, 10, 11, 13, 14, 15, 16];
+
 export default function BookingsPage() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [motorcycles, setMotorcycles] = useState<Motorcycle[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
 
   // Form State
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedTime, setSelectedTime] = useState("");
   const [form, setForm] = useState<BookingInput>({
     motorcycle_id: "",
     booking_time: "",
     symptom_note: "",
   });
   const [errors, setErrors] = useState<Partial<BookingInput>>({});
-  const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState("");
 
-  const fetchData = async () => {
-    try {
-      const [bookingsRes, mcRes] = await Promise.all([
-        fetch("/api/bookings"),
-        fetch("/api/motorcycles"),
-      ]);
+  // Queries
+  const { data: bookings = [], isLoading: isLoadingBookings } = useQuery({
+    queryKey: ["bookings"],
+    queryFn: async () => {
+      const res = await fetch("/api/bookings");
+      if (!res.ok) throw new Error("Failed to fetch bookings");
+      return res.json();
+    },
+  });
 
-      if (bookingsRes.ok) setBookings(await bookingsRes.json());
-      if (mcRes.ok) setMotorcycles(await mcRes.json());
-    } catch (error) {
-      console.error("Failed to fetch data", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: motorcycles = [] } = useQuery({
+    queryKey: ["motorcycles"],
+    queryFn: async () => {
+      const res = await fetch("/api/motorcycles");
+      if (!res.ok) throw new Error("Failed to fetch motorcycles");
+      return res.json();
+    },
+  });
 
+  const { data: availability, isLoading: isLoadingAvail } = useQuery({
+    queryKey: ["availability", selectedDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/bookings/availability?date=${selectedDate}`);
+      if (!res.ok) throw new Error("Failed to fetch availability");
+      return res.json();
+    },
+    enabled: !!selectedDate,
+  });
+
+  // Derived Slots
+  const slots: AvailabilitySlot[] = AVAILABLE_HOURS.map((h) => {
+    const timeStr = `${String(h).padStart(2, "0")}:00`;
+    const data = availability || { bookings: [], maxPerSlot: 3 };
+    const count = (data.bookings || []).filter((b: string) => {
+      const bDate = new Date(b);
+      return bDate.getHours() === h;
+    }).length;
+    return {
+      time: timeStr,
+      label: `${h < 12 ? h : h === 12 ? 12 : h - 12}:00 ${h < 12 ? "น. (เช้า)" : "น. (บ่าย)"}`,
+      available: count < (data.maxPerSlot || 3),
+      bookingCount: count,
+    };
+  });
+
+  // Mutator
+  const createBooking = useMutation({
+    mutationFn: async (data: BookingInput) => {
+      const res = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to create booking");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      if (selectedDate) {
+        queryClient.invalidateQueries({
+          queryKey: ["availability", selectedDate],
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      setShowAddForm(false);
+      setForm({ motorcycle_id: "", booking_time: "", symptom_note: "" });
+      setSelectedDate("");
+      setSelectedTime("");
+      setErrors({});
+    },
+    onError: (err: any) => {
+      setServerError(err.message);
+    },
+  });
+
+  // Sync form.booking_time whenever date or time changes
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (selectedDate && selectedTime) {
+      const combinedDatetime = `${selectedDate}T${selectedTime}`;
+      setForm((prev) => ({ ...prev, booking_time: combinedDatetime }));
+    } else {
+      setForm((prev) => ({ ...prev, booking_time: "" }));
+    }
+  }, [selectedDate, selectedTime]);
 
   const handleAddBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,152 +190,192 @@ export default function BookingsPage() {
       return;
     }
 
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data),
-      });
-
-      if (res.ok) {
-        setShowAddForm(false);
-        setForm({ motorcycle_id: "", booking_time: "", symptom_note: "" });
-        setErrors({});
-        fetchData();
-      } else {
-        const data = await res.json();
-        setServerError(data.message || "เกิดข้อผิดพลาด");
+    // Check slot is available
+    if (selectedTime) {
+      const hour = parseInt(selectedTime.split(":")[0]);
+      const slot = slots.find((s) => parseInt(s.time.split(":")[0]) === hour);
+      if (slot && !slot.available) {
+        setServerError("เวลานี้เต็มแล้ว กรุณาเลือกเวลาอื่น");
+        return;
       }
-    } catch {
-      setServerError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
-    } finally {
-      setSubmitting(false);
     }
+
+    createBooking.mutate(parsed.data);
   };
 
-  return (
-    <div className="animate-fade-in">
-      <TopBar
-        title="การจองคิวซ่อม"
-        subtitle="จองวันและเวลา หรือติดตามสถานะการซ่อม"
-      />
+  // Generate next 14 days (excluding Sunday)
+  const availableDates = Array.from({ length: 14 }, (_, i) => {
+    const d = addDays(new Date(), i + 1);
+    return d;
+  }).filter((d) => d.getDay() !== 0); // exclude Sunday
 
-      <div className="p-4 sm:p-6 space-y-6">
-        <div className="flex justify-between items-center">
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-full px-4 border-primary text-primary bg-primary/5"
-            >
+  return (
+    <div className="animate-fluid pb-20 max-w-6xl mx-auto">
+      <TopBar title="การจองคิวซ่อม" subtitle="จองวันและเวลา หรือติดตามสถานะการซ่อม" />
+
+      <div className="px-6 space-y-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex bg-muted p-1 rounded-lg w-fit">
+            <Button variant="ghost" size="sm" className="h-8 rounded-md bg-background shadow-sm px-4 text-xs font-bold">
               ทั้งหมด
             </Button>
-            <Button variant="ghost" size="sm" className="rounded-full px-4">
-              ที่ยังไม่เสร็จ
+            <Button variant="ghost" size="sm" className="h-8 rounded-md px-4 text-xs font-medium text-muted-foreground">
+              ที่รอดำเนินการ
             </Button>
           </div>
           <Button
             onClick={() => setShowAddForm(!showAddForm)}
-            className="gap-2"
+            className="h-11 px-6 rounded-xl font-bold gap-2 animate-in zoom-in-95 duration-300"
           >
-            <Plus className="w-4 h-4" />
-            เพิ่มการจองคิว
+            {showAddForm ? <XCircle className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {showAddForm ? "ยกเลิก" : "จองงานซ่อมใหม่"}
           </Button>
         </div>
 
         {/* Add Booking Form */}
         {showAddForm && (
-          <Card className="border-primary/20 bg-primary/5 overflow-hidden">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">จองคิวซ่อมใหม่</CardTitle>
+          <Card className="border border-white/5 shadow-premium bg-card/40 backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-500 overflow-hidden rounded-4xl">
+            <CardHeader className="bg-muted/10 pb-6 border-b border-white/5">
+              <CardTitle className="text-xl font-black uppercase tracking-tight">จองคิวซ่อมใหม่</CardTitle>
+              <CardDescription className="text-[10px] font-black uppercase tracking-widest opacity-40 mt-1">
+                Book a Maintenance Service Slot
+              </CardDescription>
             </CardHeader>
-            <CardContent className="p-6 pt-2">
+            <CardContent className="p-8">
               {motorcycles.length === 0 ? (
-                <div className="text-center py-6">
-                  <p className="text-sm text-muted-foreground mb-4">
-                    คุณต้องเพิ่มข้อมูลรถจักรยานยนต์ก่อนจองคิว
-                  </p>
-                  <Link href="/motorcycles">
-                    <Button variant="link" className="gap-2">
-                      <Bike className="w-4 h-4" />
-                      ไปที่หน้ารถจักรยานยนต์
-                    </Button>
-                  </Link>
+                <div className="text-center py-12 space-y-6">
+                  <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto">
+                    <Bike className="w-8 h-8 text-muted-foreground opacity-40" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="font-bold">ไม่พบข้อมูลรถของคุณ</p>
+                    <p className="text-xs text-muted-foreground max-w-xs mx-auto">คุณต้องลงทะเบียนรถจักรยายนต์ก่อนทำการจองคิวซ่อม</p>
+                  </div>
+                  <Button asChild variant="outline" className="h-11 rounded-xl px-8">
+                    <Link href="/motorcycles">ไปที่หน้ารถของฉัน</Link>
+                  </Button>
                 </div>
               ) : (
-                <form onSubmit={handleAddBooking} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">เลือกรถ</label>
-                      <select
-                        className="w-full h-11 px-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all text-sm"
-                        value={form.motorcycle_id}
-                        onChange={(e) =>
-                          setForm({ ...form, motorcycle_id: e.target.value })
-                        }
-                      >
-                        <option value="">-- กรุณาเลือกรถ --</option>
-                        {motorcycles.map((m) => (
-                          <option key={m.id} value={m.id}>
+                <form onSubmit={handleAddBooking} className="space-y-10">
+                  <div className="space-y-4">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">
+                      1. เลือกรถที่ต้องการซ่อม
+                    </Label>
+                    <Select value={form.motorcycle_id} onValueChange={(val) => setForm({ ...form, motorcycle_id: val })}>
+                      <SelectTrigger className="h-14 bg-muted/30 border-none rounded-xl px-4 font-bold">
+                        <SelectValue placeholder="-- เลือกรถของคุณ --" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border shadow-lg">
+                        {motorcycles.map((m: any) => (
+                          <SelectItem key={m.id} value={m.id} className="font-medium p-3">
                             {m.brand} {m.model} ({m.license_plate})
-                          </option>
+                          </SelectItem>
                         ))}
-                      </select>
-                      {errors.motorcycle_id && (
-                        <p className="text-xs text-destructive">
-                          {errors.motorcycle_id}
-                        </p>
-                      )}
-                    </div>
-
-                    <Input
-                      label="วันและเวลาที่จอง"
-                      type="datetime-local"
-                      value={form.booking_time}
-                      onChange={(e) =>
-                        setForm({ ...form, booking_time: e.target.value })
-                      }
-                      error={errors.booking_time}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">
-                      อาการเบื้องต้น / ข้อมูลเพิ่มเติม
-                    </label>
-                    <textarea
-                      className="w-full min-h-[100px] p-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all text-sm"
-                      placeholder="เช่น เปลี่ยนถ่ายน้ำมันเครื่อง, เคลมอะไหล่, ยางรั่ว..."
-                      value={form.symptom_note}
-                      onChange={(e) =>
-                        setForm({ ...form, symptom_note: e.target.value })
-                      }
-                    />
-                    {errors.symptom_note && (
-                      <p className="text-xs text-destructive">
-                        {errors.symptom_note}
-                      </p>
+                      </SelectContent>
+                    </Select>
+                    {errors.motorcycle_id && (
+                      <p className="text-[10px] text-destructive font-bold uppercase tracking-wider px-1">{errors.motorcycle_id}</p>
                     )}
                   </div>
 
+                  <div className="space-y-4">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">2. เลือกวันที่</Label>
+                    <div className="flex gap-3 overflow-x-auto pb-4 px-1 snap-x scrollbar-hide">
+                      {availableDates.map((d) => {
+                        const dStr = format(d, "yyyy-MM-dd");
+                        const isSelected = selectedDate === dStr;
+                        return (
+                          <button
+                            key={dStr}
+                            type="button"
+                            onClick={() => setSelectedDate(dStr)}
+                            className={cn(
+                              "shrink-0 w-20 h-24 rounded-2xl flex flex-col items-center justify-center gap-1 border border-white/5 transition-all snap-start active-prime",
+                              isSelected
+                                ? "bg-primary text-primary-foreground border-primary shadow-md scale-105"
+                                : "bg-muted/30 text-muted-foreground hover:bg-muted border-white/10",
+                            )}
+                          >
+                            <span className="text-[9px] font-black uppercase tracking-tighter opacity-70">
+                              {format(d, "EEE", { locale: th })}
+                            </span>
+                            <span className="text-2xl font-black">{format(d, "d")}</span>
+                            <span className="text-[9px] font-bold opacity-70">{format(d, "MMM", { locale: th })}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {selectedDate && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">3. เลือกเวลาว่าง</Label>
+                      <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
+                        {isLoadingAvail ? (
+                          <div className="col-span-full py-8 text-center flex flex-col items-center gap-2">
+                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground/30" />
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase">กำลังตรวจสอบคิวว่าง...</p>
+                          </div>
+                        ) : (
+                          slots.map((slot) => {
+                            const isSelected = selectedTime === slot.time;
+                            return (
+                              <button
+                                key={slot.time}
+                                type="button"
+                                disabled={!slot.available}
+                                onClick={() => setSelectedTime(slot.time)}
+                                className={cn(
+                                  "h-16 rounded-xl flex flex-col items-center justify-center border transition-all font-bold active-prime",
+                                  !slot.available && "opacity-20 cursor-not-allowed bg-muted border-none",
+                                  slot.available &&
+                                    !isSelected &&
+                                    "bg-card border-muted-foreground/10 hover:border-primary/50 text-foreground",
+                                  isSelected && "bg-primary text-primary-foreground border-primary shadow-md scale-105",
+                                )}
+                              >
+                                <span className="text-sm font-black tracking-tight">{slot.time}</span>
+                                <span className="text-[8px] uppercase tracking-widest">{slot.available ? "ว่าง" : "เต็ม"}</span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">4. ข้อมูลเพิ่มเติม</Label>
+                    <Textarea
+                      placeholder="อาการเบื้องต้น เช่น สตาร์ทไม่ติด, มีเสียงดังที่เครื่อง, หรือสิ่งที่ต้องการให้ช่างตรวจสอบ..."
+                      className="min-h-[140px] bg-muted/30 border-none rounded-xl p-5 text-sm font-medium focus-visible:ring-primary/40"
+                      value={form.symptom_note || ""}
+                      onChange={(e) => setForm({ ...form, symptom_note: e.target.value })}
+                    />
+                  </div>
+
                   {serverError && (
-                    <div className="flex items-center gap-2 text-destructive text-sm bg-destructive/10 p-3 rounded-lg">
-                      <AlertCircle className="w-4 h-4" />
+                    <div className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 text-destructive text-xs font-bold border border-destructive/20 uppercase tracking-wide">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
                       {serverError}
                     </div>
                   )}
 
-                  <div className="flex justify-end gap-3">
+                  <div className="flex gap-4 sm:justify-end pt-4 border-t">
                     <Button
                       type="button"
                       variant="ghost"
                       onClick={() => setShowAddForm(false)}
+                      className="h-12 px-8 rounded-xl font-bold uppercase tracking-widest text-xs"
                     >
                       ยกเลิก
                     </Button>
-                    <Button type="submit" loading={submitting}>
-                      ยืนยันการจอง
+                    <Button
+                      type="submit"
+                      disabled={createBooking.isPending}
+                      className="h-12 flex-1 sm:flex-none sm:min-w-[240px] rounded-xl font-black uppercase tracking-[0.2em] text-xs shadow-md"
+                    >
+                      {createBooking.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "ยืนยันการจองคิวซ่อม"}
                     </Button>
                   </div>
                 </form>
@@ -246,104 +384,108 @@ export default function BookingsPage() {
           </Card>
         )}
 
-        {/* List */}
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <Loader2 className="w-8 h-8 animate-spin mb-2" />
-            <p>กำลังโหลดข้อมูลการจอง...</p>
+        {/* Bookings List */}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">ประวัติการจองของคุณ</h3>
           </div>
-        ) : bookings.length === 0 ? (
-          <div className="text-center py-20 border-2 border-dashed border-border rounded-2xl bg-muted/20">
-            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-              <Calendar className="w-8 h-8 text-muted-foreground" />
+
+          {isLoadingBookings ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-32 rounded-2xl" />
+              ))}
             </div>
-            <p className="text-muted-foreground">
-              ยังไม่มีประวัติการจองคิวซ่อม
-            </p>
-            <Button variant="link" onClick={() => setShowAddForm(true)}>
-              จองคิวซ่อมคันแรก
-            </Button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {bookings.map((booking) => {
-              const cfg = statusConfig[booking.status] || statusConfig.pending;
-              const bookingDate = new Date(booking.booking_time);
-
-              return (
-                <Card
-                  key={booking.id}
-                  className="group hover:border-primary/30 transition-all"
+          ) : bookings.length === 0 ? (
+            <div className="py-24 text-center border bg-muted/10 rounded-4xl border-dashed flex flex-col items-center gap-6">
+              <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center opacity-20">
+                <CalendarIcon className="w-10 h-10" />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-bold opacity-40 uppercase tracking-widest">ยังไม่มีรายการจองคิวซ่อม</p>
+                <Button
+                  variant="link"
+                  className="text-primary font-black uppercase tracking-[0.2em] text-[10px]"
+                  onClick={() => setShowAddForm(true)}
                 >
-                  <CardContent className="p-0">
-                    <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                          <Clock className="w-6 h-6 text-primary" />
+                  จองคิวซ่อมครั้งแรก
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
+              {bookings.map((booking: any) => {
+                const cfg = statusConfig[booking.status] || statusConfig.pending;
+                const bDate = new Date(booking.booking_time);
+                return (
+                  <Card
+                    key={booking.id}
+                    className="group hover:border-white/20 transition-all border border-white/5 bg-card/40 backdrop-blur-md shadow-premium active-prime rounded-2xl overflow-hidden"
+                  >
+                    <CardContent className="p-0">
+                      <div className="flex flex-col sm:flex-row items-stretch">
+                        <div className="bg-muted/50 sm:w-24 p-6 flex sm:flex-col items-center justify-center gap-2 border-r">
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase">
+                            {format(bDate, "MMM", { locale: th })}
+                          </span>
+                          <span className="text-3xl font-black tracking-tighter leading-none">{format(bDate, "d")}</span>
                         </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-bold text-foreground">
-                              {bookingDate.toLocaleDateString("th-TH", {
-                                day: "numeric",
-                                month: "long",
-                                year: "numeric",
-                              })}
-                            </h4>
-                            <Badge variant={cfg.variant}>{cfg.label}</Badge>
+                        <div className="flex-1 p-6 flex flex-col justify-between gap-6">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <Badge
+                                variant="secondary"
+                                className={cn(
+                                  "text-[8px] font-bold uppercase tracking-widest rounded-full px-2 py-0.5 border-none",
+                                  cfg.color,
+                                )}
+                              >
+                                {cfg.label}
+                              </Badge>
+                              <div className="flex items-center gap-1.5 text-muted-foreground">
+                                <Clock className="w-3.5 h-3.5" strokeWidth={2.5} />
+                                <span className="text-[11px] font-bold">{format(bDate, "HH:mm")} น.</span>
+                              </div>
+                            </div>
+                            <div className="space-y-0.5">
+                              <h4 className="text-lg font-black tracking-tight leading-tight uppercase line-clamp-1">
+                                {booking.motorcycle.brand} {booking.motorcycle.model}
+                              </h4>
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                                {booking.motorcycle.license_plate}
+                              </p>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1.5 font-medium text-foreground/80">
-                              <Loader2 className="w-3 h-3 text-primary animate-pulse" />{" "}
-                              {/* Placeholder icon */}
-                              {bookingDate.toLocaleTimeString("th-TH", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}{" "}
-                              น.
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                              <Bike className="w-3.5 h-3.5" />
-                              {booking.motorcycle.brand}{" "}
-                              {booking.motorcycle.model} (
-                              {booking.motorcycle.license_plate})
-                            </span>
+
+                          <div className="flex items-center justify-between pt-4 border-t border-muted">
+                            <Button
+                              asChild
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-0 text-[10px] font-bold uppercase tracking-widest opacity-40 group-hover:opacity-100 group-hover:text-primary transition-all"
+                            >
+                              <Link href={`/bookings/${booking.id}`}>
+                                รายละเอียด <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                              </Link>
+                            </Button>
+                            {booking.status === "confirmed" && (
+                              <Badge
+                                variant="outline"
+                                className="h-7 w-7 rounded-full p-0 flex items-center justify-center border-emerald-500/20 text-emerald-500"
+                              >
+                                <ClipboardList className="w-3.5 h-3.5" />
+                              </Badge>
+                            )}
                           </div>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-3 self-end sm:self-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs h-8"
-                        >
-                          ดูรายละเอียด
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors"
-                        >
-                          <ChevronRight className="w-5 h-5" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {booking.symptom_note && (
-                      <div className="bg-muted/30 px-5 py-3 border-t border-border flex items-start gap-2">
-                        <ClipboardList className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                        <p className="text-xs text-muted-foreground italic truncate">
-                          &quot;{booking.symptom_note}&quot;
-                        </p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

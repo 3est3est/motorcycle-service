@@ -1,12 +1,226 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+model User {
+  id                String             @id @default(uuid()) @db.Uuid
+  email             String             @unique
+  role              UserRole           @default(customer)
+  created_at        DateTime           @default(now()) @db.Timestamptz(6)
+  customer          Customer?
+  partInventoryLogs PartInventoryLog[]
+  repair_jobs       RepairJob[]        @relation("StaffRepairJobs")
+
+  @@map("users")
+}
+
+model Customer {
+  id             String         @id @default(uuid()) @db.Uuid
+  user_id        String         @unique @db.Uuid
+  full_name      String
+  phone          String
+  created_at     DateTime       @default(now()) @db.Timestamptz(6)
+  image_url      String?
+  bookings       Booking[]
+  user           User           @relation(fields: [user_id], references: [id])
+  loyalty_points LoyaltyPoints?
+  motorcycles    Motorcycle[]
+
+  @@map("customers")
+}
+
+model Motorcycle {
+  id            String    @id @default(uuid()) @db.Uuid
+  customer_id   String    @db.Uuid
+  brand         String
+  model         String
+  license_plate String    @unique
+  year          Int?
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  image_url     String?
+  bookings      Booking[]
+  customer      Customer  @relation(fields: [customer_id], references: [id])
+
+  @@map("motorcycles")
+}
+
+model Booking {
+  id            String        @id @default(uuid()) @db.Uuid
+  customer_id   String        @db.Uuid
+  motorcycle_id String        @db.Uuid
+  booking_time  DateTime      @db.Timestamptz(6)
+  symptom_note  String?
+  status        BookingStatus @default(pending)
+  created_at    DateTime      @default(now()) @db.Timestamptz(6)
+  customer      Customer      @relation(fields: [customer_id], references: [id])
+  motorcycle    Motorcycle    @relation(fields: [motorcycle_id], references: [id])
+  estimate      Estimate?
+  quotation     Quotation?
+  repair_job    RepairJob?
+
+  @@map("bookings")
+}
+
+model Estimate {
+  id             String         @id @default(uuid()) @db.Uuid
+  booking_id     String         @unique @db.Uuid
+  description    String
+  estimated_cost Decimal        @db.Decimal(10, 2)
+  created_at     DateTime       @default(now()) @db.Timestamptz(6)
+  status         EstimateStatus @default(pending)
+  booking        Booking        @relation(fields: [booking_id], references: [id])
+
+  @@map("estimates")
+}
+
+model Quotation {
+  id           String          @id @default(uuid()) @db.Uuid
+  booking_id   String          @unique @db.Uuid
+  total_amount Decimal         @db.Decimal(10, 2)
+  status       QuotationStatus @default(pending_customer_approval)
+  created_at   DateTime        @default(now()) @db.Timestamptz(6)
+  items        QuotationItem[]
+  booking      Booking         @relation(fields: [booking_id], references: [id])
+  repair_job   RepairJob?
+
+  @@map("quotations")
+}
+
+model QuotationItem {
+  id           String    @id @default(uuid()) @db.Uuid
+  quotation_id String    @db.Uuid
+  description  String
+  labor        Decimal   @db.Decimal(10, 2)
+  part_id      String?   @db.Uuid
+  part_qty     Int?
+  part         Part?     @relation(fields: [part_id], references: [id])
+  quotation    Quotation @relation(fields: [quotation_id], references: [id])
+
+  @@map("quotation_items")
+}
+
+model RepairJob {
+  id                 String             @id @default(uuid()) @db.Uuid
+  booking_id         String             @unique @db.Uuid
+  quotation_id       String?            @unique @db.Uuid
+  assigned_staff_id  String?            @db.Uuid
+  start_date         DateTime?          @db.Timestamptz(6)
+  end_date           DateTime?          @db.Timestamptz(6)
+  labor_cost         Decimal            @default(0) @db.Decimal(10, 2)
+  status             RepairJobStatus    @default(created)
+  created_at         DateTime           @default(now()) @db.Timestamptz(6)
+  customer_confirmed Boolean            @default(false)
+  note               String?
+  progress           Int                @default(0)
+  partInventoryLogs  PartInventoryLog[]
+  payments           Payment?
+  booking            Booking            @relation(fields: [booking_id], references: [id])
+  quotation          Quotation?         @relation(fields: [quotation_id], references: [id])
+  staff              User?              @relation("StaffRepairJobs", fields: [assigned_staff_id], references: [id])
+  repair_parts       RepairPart[]
+
+  @@map("repair_jobs")
+}
+
+model Part {
+  id              String             @id @default(uuid()) @db.Uuid
+  name            String
+  description     String?
+  price           Decimal            @db.Decimal(10, 2)
+  stock_qty       Int                @default(0)
+  created_at      DateTime           @default(now()) @db.Timestamptz(6)
+  image_url       String?
+  min_stock       Int                @default(5)
+  inventory_logs  PartInventoryLog[]
+  quotation_items QuotationItem[]
+  repair_parts    RepairPart[]
+
+  @@map("parts")
+}
+
+model PartInventoryLog {
+  id            String           @id @default(uuid()) @db.Uuid
+  part_id       String           @db.Uuid
+  repair_job_id String?          @db.Uuid
+  staff_id      String?          @db.Uuid
+  change_qty    Int
+  balance_after Int
+  type          InventoryLogType
+  note          String?
+  created_at    DateTime         @default(now()) @db.Timestamptz(6)
+  part          Part             @relation(fields: [part_id], references: [id], onDelete: Cascade)
+  repair_job    RepairJob?       @relation(fields: [repair_job_id], references: [id])
+  staff         User?            @relation(fields: [staff_id], references: [id])
+
+  @@map("part_inventory_logs")
+}
+
+model RepairPart {
+  id            String    @id @default(uuid()) @db.Uuid
+  repair_job_id String    @db.Uuid
+  part_id       String    @db.Uuid
+  quantity      Int
+  price_total   Decimal   @db.Decimal(10, 2)
+  unit_price    Decimal   @db.Decimal(10, 2)
+  part          Part      @relation(fields: [part_id], references: [id])
+  repair_job    RepairJob @relation(fields: [repair_job_id], references: [id])
+
+  @@map("repair_parts")
+}
+
+model Payment {
+  id                 String             @id @default(uuid()) @db.Uuid
+  repair_job_id      String             @unique @db.Uuid
+  amount             Decimal            @db.Decimal(10, 2)
+  method             PaymentMethod
+  status             PaymentStatus      @default(pending)
+  paid_at            DateTime?          @db.Timestamptz(6)
+  created_at         DateTime           @default(now()) @db.Timestamptz(6)
+  slip_url           String?
+  repair_job         RepairJob          @relation(fields: [repair_job_id], references: [id])
+  point_transactions PointTransaction[]
+
+  @@map("payments")
+}
+
+model LoyaltyPoints {
+  id                 String             @id @default(uuid()) @db.Uuid
+  customer_id        String             @unique @db.Uuid
+  total_points       Int                @default(0)
+  updated_at         DateTime           @updatedAt @db.Timestamptz(6)
+  customer           Customer           @relation(fields: [customer_id], references: [id])
+  point_transactions PointTransaction[]
+
+  @@map("loyalty_points")
+}
+
+model PointTransaction {
+  id                String         @id @default(uuid()) @db.Uuid
+  loyalty_points_id String         @db.Uuid
+  payment_id        String?        @db.Uuid
+  event_type        PointEventType
+  points            Int
+  created_at        DateTime       @default(now()) @db.Timestamptz(6)
+  loyalty_points    LoyaltyPoints  @relation(fields: [loyalty_points_id], references: [id])
+  payment           Payment?       @relation(fields: [payment_id], references: [id])
+
+  @@map("point_transactions")
+}
+
+model Notification {
+  id         String           @id @default(uuid()) @db.Uuid
+  user_id    String           @db.Uuid
+  title      String
+  message    String
+  type       NotificationType @default(INFO)
+  read       Boolean          @default(false)
+  created_at DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@map("notifications")
 }
 
 enum UserRole {
@@ -48,200 +262,32 @@ enum QuotationStatus {
   rejected
 }
 
+enum EstimateStatus {
+  pending
+  approved
+  rejected
+}
+
 enum PointEventType {
   earn
   redeem
   adjust
 }
 
-model User {
-  id         String   @id @default(uuid()) @db.Uuid
-  email      String   @unique
-  role       UserRole @default(customer)
-  created_at DateTime @default(now()) @db.Timestamptz
-
-  customer Customer?
-
-  @@map("users")
+enum InventoryLogType {
+  RESTOCK
+  REPAIR_USE
+  REPAIR_RETURN
+  ADJUSTMENT
 }
 
-model Customer {
-  id         String   @id @default(uuid()) @db.Uuid
-  user_id    String   @unique @db.Uuid
-  full_name  String
-  phone      String
-  created_at DateTime @default(now()) @db.Timestamptz
-
-  user           User           @relation(fields: [user_id], references: [id])
-  motorcycles    Motorcycle[]
-  bookings       Booking[]
-  loyalty_points LoyaltyPoints?
-
-  @@map("customers")
-}
-
-model Motorcycle {
-  id            String   @id @default(uuid()) @db.Uuid
-  customer_id   String   @db.Uuid
-  brand         String
-  model         String
-  license_plate String   @unique
-  year          Int?
-  image_url     String?
-  created_at    DateTime @default(now()) @db.Timestamptz
-
-  customer Customer  @relation(fields: [customer_id], references: [id])
-  bookings Booking[]
-
-  @@map("motorcycles")
-}
-
-model Booking {
-  id            String        @id @default(uuid()) @db.Uuid
-  customer_id   String        @db.Uuid
-  motorcycle_id String        @db.Uuid
-  booking_time  DateTime      @db.Timestamptz
-  symptom_note  String?
-  status        BookingStatus @default(pending)
-  created_at    DateTime      @default(now()) @db.Timestamptz
-
-  customer   Customer   @relation(fields: [customer_id], references: [id])
-  motorcycle Motorcycle @relation(fields: [motorcycle_id], references: [id])
-  estimate   Estimate?
-  quotation  Quotation?
-  repair_job RepairJob?
-
-  @@map("bookings")
-}
-
-model Estimate {
-  id             String   @id @default(uuid()) @db.Uuid
-  booking_id     String   @unique @db.Uuid
-  description    String
-  estimated_cost Decimal  @db.Decimal(10, 2)
-  created_at     DateTime @default(now()) @db.Timestamptz
-
-  booking Booking @relation(fields: [booking_id], references: [id])
-
-  @@map("estimates")
-}
-
-model Quotation {
-  id           String          @id @default(uuid()) @db.Uuid
-  booking_id   String          @unique @db.Uuid
-  total_amount Decimal         @db.Decimal(10, 2)
-  status       QuotationStatus @default(pending_customer_approval)
-  created_at   DateTime        @default(now()) @db.Timestamptz
-
-  booking    Booking         @relation(fields: [booking_id], references: [id])
-  items      QuotationItem[]
-  repair_job RepairJob?
-
-  @@map("quotations")
-}
-
-model QuotationItem {
-  id           String  @id @default(uuid()) @db.Uuid
-  quotation_id String  @db.Uuid
-  description  String
-  labor        Decimal @db.Decimal(10, 2)
-  part_id      String? @db.Uuid
-  part_qty     Int?
-
-  quotation Quotation @relation(fields: [quotation_id], references: [id])
-  part      Part?     @relation(fields: [part_id], references: [id])
-
-  @@map("quotation_items")
-}
-
-model RepairJob {
-  id                 String          @id @default(uuid()) @db.Uuid
-  booking_id         String          @unique @db.Uuid
-  quotation_id       String?         @unique @db.Uuid
-  assigned_staff_id  String?         @db.Uuid
-  start_date         DateTime?       @db.Timestamptz
-  end_date           DateTime?       @db.Timestamptz
-  labor_cost         Decimal         @default(0) @db.Decimal(10, 2)
-  status             RepairJobStatus @default(created)
-  progress           Int             @default(0)
-  note               String?
-  customer_confirmed Boolean         @default(false)
-  created_at         DateTime        @default(now()) @db.Timestamptz
-
-  booking      Booking      @relation(fields: [booking_id], references: [id])
-  quotation    Quotation?   @relation(fields: [quotation_id], references: [id])
-  repair_parts RepairPart[]
-  payments     Payment[]
-
-  @@map("repair_jobs")
-}
-
-model Part {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String
-  description String?
-  price       Decimal  @db.Decimal(10, 2)
-  stock_qty   Int      @default(0)
-  image_url   String?
-  created_at  DateTime @default(now()) @db.Timestamptz
-
-  repair_parts    RepairPart[]
-  quotation_items QuotationItem[]
-
-  @@map("parts")
-}
-
-model RepairPart {
-  id            String  @id @default(uuid()) @db.Uuid
-  repair_job_id String  @db.Uuid
-  part_id       String  @db.Uuid
-  quantity      Int
-  unit_price    Decimal @db.Decimal(10, 2)
-  price_total   Decimal @db.Decimal(10, 2)
-
-  repair_job RepairJob @relation(fields: [repair_job_id], references: [id])
-  part       Part      @relation(fields: [part_id], references: [id])
-
-  @@map("repair_parts")
-}
-
-model Payment {
-  id            String        @id @default(uuid()) @db.Uuid
-  repair_job_id String        @unique @db.Uuid
-  amount        Decimal       @db.Decimal(10, 2)
-  method        PaymentMethod
-  status        PaymentStatus @default(pending)
-  paid_at       DateTime?     @db.Timestamptz
-  created_at    DateTime      @default(now()) @db.Timestamptz
-
-  repair_job         RepairJob          @relation(fields: [repair_job_id], references: [id])
-  point_transactions PointTransaction[]
-
-  @@map("payments")
-}
-
-model LoyaltyPoints {
-  id           String   @id @default(uuid()) @db.Uuid
-  customer_id  String   @unique @db.Uuid
-  total_points Int      @default(0)
-  updated_at   DateTime @updatedAt @db.Timestamptz
-
-  customer           Customer           @relation(fields: [customer_id], references: [id])
-  point_transactions PointTransaction[]
-
-  @@map("loyalty_points")
-}
-
-model PointTransaction {
-  id                String         @id @default(uuid()) @db.Uuid
-  loyalty_points_id String         @db.Uuid
-  payment_id        String?        @db.Uuid
-  event_type        PointEventType
-  points            Int
-  created_at        DateTime       @default(now()) @db.Timestamptz
-
-  loyalty_points LoyaltyPoints @relation(fields: [loyalty_points_id], references: [id])
-  payment        Payment?      @relation(fields: [payment_id], references: [id])
-
-  @@map("point_transactions")
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  BOOKING_NEW
+  REPAIR_STATUS
+  STOCK_LOW
+  PAYMENT_CONFIRMED
 }

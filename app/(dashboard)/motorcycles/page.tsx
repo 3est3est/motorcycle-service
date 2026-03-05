@@ -2,19 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { TopBar } from "@/components/layout/topbar";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  Plus,
-  Bike,
-  Trash2,
-  AlertCircle,
-  Loader2,
-  ImagePlus,
-} from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Plus, Bike, Trash2, AlertCircle, Loader2, CheckCircle2, XCircle, AlertTriangle, Camera, ChevronRight } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motorcycleSchema, type MotorcycleInput } from "@/lib/validations";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface Motorcycle {
   id: string;
@@ -26,9 +27,10 @@ interface Motorcycle {
 }
 
 export default function MotorcyclesPage() {
-  const [motorcycles, setMotorcycles] = useState<Motorcycle[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<MotorcycleInput>({
     brand: "",
     model: "",
@@ -37,37 +39,96 @@ export default function MotorcyclesPage() {
     image_url: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [serverError, setServerError] = useState("");
 
-  const fetchMotorcycles = async () => {
-    try {
+  const { data: motorcycles = [], isLoading } = useQuery<Motorcycle[]>({
+    queryKey: ["motorcycles"],
+    queryFn: async () => {
       const res = await fetch("/api/motorcycles");
-      if (res.ok) {
-        const data = await res.json();
-        setMotorcycles(data);
+      if (!res.ok) throw new Error("Failed to fetch motorcycles");
+      return res.json();
+    },
+  });
+
+  const createMotorcycle = useMutation({
+    mutationFn: async (data: MotorcycleInput) => {
+      const res = await fetch("/api/motorcycles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Something went wrong");
       }
-    } catch (error) {
-      console.error("Failed to fetch motorcycles", error);
-    } finally {
-      setLoading(false);
-    }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["motorcycles"] });
+      setShowAddForm(false);
+      resetForm();
+      toast.success("เพิ่มข้อมูลรถเรียบร้อยแล้ว");
+    },
+    onError: (err: any) => {
+      toast.error(err.message);
+    },
+  });
+
+  const updateMotorcycle = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: MotorcycleInput }) => {
+      const res = await fetch(`/api/motorcycles/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Something went wrong");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["motorcycles"] });
+      setShowAddForm(false);
+      setEditingId(null);
+      resetForm();
+      toast.success("อัปเดตข้อมูลรถเรียบร้อยแล้ว");
+    },
+    onError: (err: any) => {
+      toast.error(err.message);
+    },
+  });
+
+  const resetForm = () => {
+    setForm({
+      brand: "",
+      model: "",
+      license_plate: "",
+      year: undefined,
+      image_url: "",
+    });
+    setEditingId(null);
+    setErrors({});
   };
 
-  useEffect(() => {
-    fetchMotorcycles();
-  }, []);
+  const deleteMotorcycle = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/motorcycles/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Could not delete");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["motorcycles"] });
+      toast.success("ลบข้อมูลรถเรียบร้อยแล้ว");
+    },
+    onError: () => {
+      toast.error("ไม่สามารถลบข้อมูลได้");
+    },
+  });
 
-  const handleAddMotorcycle = async (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setServerError("");
-
-    // Validate with Zod
-    const parsed = motorcycleSchema.safeParse({
-      ...form,
-      year: form.year ? Number(form.year) : undefined,
-    });
-
+    setErrors({});
+    const parsed = motorcycleSchema.safeParse(form);
     if (!parsed.success) {
       const fieldErrors: any = {};
       parsed.error.issues.forEach((issue) => {
@@ -77,155 +138,182 @@ export default function MotorcyclesPage() {
       return;
     }
 
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/motorcycles", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data),
-      });
-
-      if (res.ok) {
-        setShowAddForm(false);
-        setForm({
-          brand: "",
-          model: "",
-          license_plate: "",
-          year: undefined,
-          image_url: "",
-        });
-        setErrors({});
-        fetchMotorcycles();
-      } else {
-        const data = await res.json();
-        setServerError(data.message || "เกิดข้อผิดพลาด");
-      }
-    } catch {
-      setServerError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
-    } finally {
-      setSubmitting(false);
+    if (editingId) {
+      updateMotorcycle.mutate({ id: editingId, data: parsed.data });
+    } else {
+      createMotorcycle.mutate(parsed.data);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("ยืนยันการลบรถคันนี้?")) return;
+  const handleEditClick = (m: Motorcycle) => {
+    setEditingId(m.id);
+    setForm({
+      brand: m.brand,
+      model: m.model,
+      license_plate: m.license_plate,
+      year: m.year || undefined,
+      image_url: m.image_url || "",
+    });
+    setShowAddForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
-    try {
-      const res = await fetch(`/api/motorcycles/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setMotorcycles(motorcycles.filter((m) => m.id !== id));
-      }
-    } catch (error) {
-      alert("ลบข้อมูลไม่สำเร็จ");
-    }
+  const doDelete = async () => {
+    if (!deleteId) return;
+    const id = deleteId;
+    setDeleteId(null);
+    deleteMotorcycle.mutate(id);
   };
 
   return (
-    <div className="animate-fade-in">
-      <TopBar
-        title="รถจักรยานยนต์"
-        subtitle="จัดการข้อมูลรถจักรยานยนต์ของคุณ"
-      />
+    <div className="animate-fluid pb-20 max-w-7xl mx-auto">
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6 text-destructive" />
+            </div>
+            <DialogTitle className="text-xl font-bold">ยืนยันการลบข้อมูล</DialogTitle>
+            <DialogDescription>คุณต้องการลบข้อมูลรถคันนี้ออกจากระบบใช่ไหม? การกระทำนี้ไม่สามารถย้อนคืนได้</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setDeleteId(null)} className="rounded-xl">
+              ยกเลิก
+            </Button>
+            <Button variant="destructive" onClick={doDelete} className="rounded-xl font-bold">
+              ยืนยันลบ
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      <div className="p-4 sm:p-6 space-y-6">
-        <div className="flex justify-between items-center">
-          <h3 className="text-lg font-bold text-foreground">
-            รถของคุณ ({motorcycles.length})
-          </h3>
+      <TopBar title="รถจักรยานยนต์" subtitle="จัดการและติดตามข้อมูลรถของคุณ" />
+
+      <div className="px-6 space-y-10">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+          <div className="space-y-1">
+            <h3 className="text-xl font-bold tracking-tight">รถของฉัน ({motorcycles.length})</h3>
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">ข้อมูลรถที่ลงทะเบียนไว้ในระบบ</p>
+          </div>
           <Button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="gap-2 rounded-xl"
+            onClick={() => {
+              if (showAddForm) resetForm();
+              setShowAddForm(!showAddForm);
+            }}
+            className="h-11 px-6 rounded-xl font-bold gap-2 shadow-lg shadow-primary/20 active-prime transition-transform"
           >
-            <Plus className="w-4 h-4" />
-            เพิ่มรถใหม่
+            {showAddForm ? <XCircle className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {showAddForm ? "ยกเลิก" : "เพิ่มรถคันใหม่"}
           </Button>
         </div>
 
         {/* Add Form */}
         {showAddForm && (
-          <Card className="border-primary/20 bg-primary/5 rounded-[2.5rem] overflow-hidden">
+          <Card className="border-none shadow-premium overflow-hidden animate-in slide-in-from-top-4 duration-500">
+            <CardHeader className="bg-muted/30 pb-6 border-b">
+              <CardTitle className="text-lg font-black uppercase tracking-wider">
+                {editingId ? "แก้ไขข้อมูลรถ" : "เพิ่มข้อมูลรถใหม่"}
+              </CardTitle>
+              <CardDescription className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60">
+                {editingId ? "ปรับปรุงรายละเอียดรถของคุณ" : "ระบุรายละเอียดและอัปโหลดรูปภาพรถของคุณ"}
+              </CardDescription>
+            </CardHeader>
             <CardContent className="p-8">
-              <form onSubmit={handleAddMotorcycle} className="space-y-8">
-                <div className="flex flex-col md:flex-row gap-8">
-                  <div className="space-y-2">
-                    <label className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">
-                      รูปภาพรถจักรยานยนต์
-                    </label>
+              <form onSubmit={handleFormSubmit} className="space-y-10">
+                <div className="flex flex-col lg:flex-row gap-12">
+                  <div className="space-y-4 shrink-0">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">รูปถ่ายรถ</Label>
                     <ImageUpload
-                      value={form.image_url}
+                      value={form.image_url || ""}
                       onChange={(url) => setForm({ ...form, image_url: url })}
                       folder="motorcycles"
                     />
                   </div>
 
-                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <Input
-                      label="ยี่ห้อ"
-                      placeholder="เช่น Honda, Yamaha"
-                      value={form.brand}
-                      onChange={(e) =>
-                        setForm({ ...form, brand: e.target.value })
-                      }
-                      error={errors.brand}
-                    />
-                    <Input
-                      label="รุ่นรถ"
-                      placeholder="เช่น PCX 160"
-                      value={form.model}
-                      onChange={(e) =>
-                        setForm({ ...form, model: e.target.value })
-                      }
-                      error={errors.model}
-                    />
-                    <Input
-                      label="เลขทะเบียน"
-                      placeholder="1กข 1234 กทม."
-                      value={form.license_plate}
-                      onChange={(e) =>
-                        setForm({ ...form, license_plate: e.target.value })
-                      }
-                      error={errors.license_plate}
-                    />
-                    <Input
-                      label="ปีที่จดทะเบียน (พ.ศ.)"
-                      type="number"
-                      placeholder="เช่น 2566"
-                      value={form.year?.toString() || ""}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          year: e.target.value
-                            ? Number(e.target.value)
-                            : undefined,
-                        })
-                      }
-                      error={errors.year}
-                    />
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">ยี่ห้อรถ</Label>
+                      <Input
+                        placeholder="เช่น Honda, Yamaha"
+                        className="h-12 bg-muted/30 border-none font-bold focus-visible:ring-primary/40 rounded-xl px-4"
+                        value={form.brand}
+                        onChange={(e) => setForm({ ...form, brand: e.target.value })}
+                      />
+                      {errors.brand && (
+                        <p className="text-[10px] text-destructive font-bold uppercase tracking-wider px-1">{errors.brand}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">รุ่นรถ</Label>
+                      <Input
+                        placeholder="เช่น PCX 160"
+                        className="h-12 bg-muted/30 border-none font-bold focus-visible:ring-primary/40 rounded-xl px-4"
+                        value={form.model}
+                        onChange={(e) => setForm({ ...form, model: e.target.value })}
+                      />
+                      {errors.model && (
+                        <p className="text-[10px] text-destructive font-bold uppercase tracking-wider px-1">{errors.model}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">เลขทะเบียน</Label>
+                      <Input
+                        placeholder="1กข 1234 กทม."
+                        className="h-12 bg-muted/30 border-none font-bold focus-visible:ring-primary/40 rounded-xl px-4"
+                        value={form.license_plate}
+                        onChange={(e) => setForm({ ...form, license_plate: e.target.value })}
+                      />
+                      {errors.license_plate && (
+                        <p className="text-[10px] text-destructive font-bold uppercase tracking-wider px-1">{errors.license_plate}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">ปีที่จดทะเบียน</Label>
+                      <Input
+                        type="number"
+                        placeholder="เช่น 2566"
+                        className="h-12 bg-muted/30 border-none font-bold focus-visible:ring-primary/40 rounded-xl px-4"
+                        value={form.year?.toString() || ""}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            year: e.target.value ? Number(e.target.value) : undefined,
+                          })
+                        }
+                      />
+                      {errors.year && <p className="text-[10px] text-destructive font-bold uppercase tracking-wider px-1">{errors.year}</p>}
+                    </div>
                   </div>
                 </div>
 
-                {serverError && (
-                  <div className="flex items-center gap-2 text-destructive text-sm bg-destructive/10 p-4 rounded-2xl border border-destructive/20 font-bold">
-                    <AlertCircle className="w-4 h-4" />
-                    {serverError}
-                  </div>
-                )}
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-primary/10">
+                <div className="flex justify-end gap-4 pt-8 border-t">
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => setShowAddForm(false)}
-                    className="rounded-xl font-bold"
+                    onClick={() => {
+                      setShowAddForm(false);
+                      resetForm();
+                    }}
+                    className="h-12 px-8 rounded-xl font-bold uppercase tracking-widest text-xs"
                   >
                     ยกเลิก
                   </Button>
                   <Button
                     type="submit"
-                    loading={submitting}
-                    className="rounded-xl font-bold px-8"
+                    disabled={createMotorcycle.isPending || updateMotorcycle.isPending}
+                    className="h-12 min-w-[200px] rounded-xl font-black uppercase tracking-[0.2em] text-xs shadow-lg shadow-primary/20"
                   >
-                    บันทึกข้อมูลรถคันนี้
+                    {createMotorcycle.isPending || updateMotorcycle.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : editingId ? (
+                      "บันทึกการแก้ไข"
+                    ) : (
+                      "บันทึกข้อมูลรถ"
+                    )}
                   </Button>
                 </div>
               </form>
@@ -234,37 +322,36 @@ export default function MotorcyclesPage() {
         )}
 
         {/* List */}
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <Loader2 className="w-8 h-8 animate-spin mb-2" />
-            <p className="font-bold uppercase tracking-widest text-[10px]">
-              กำลังโหลดข้อมูล...
-            </p>
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-64 rounded-3xl" />
+            ))}
           </div>
         ) : motorcycles.length === 0 ? (
-          <div className="text-center py-20 border-2 border-dashed border-border rounded-[3rem] bg-muted/20">
-            <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
-              <Bike className="w-10 h-10 text-muted-foreground" />
+          <div className="py-24 text-center border bg-muted/10 rounded-[2.5rem] border-dashed flex flex-col items-center gap-8">
+            <div className="w-20 h-20 rounded-2xl bg-muted flex items-center justify-center opacity-20">
+              <Bike className="w-10 h-10" />
             </div>
-            <p className="text-muted-foreground font-bold">
-              ยังไม่มีข้อมูลรถจักรยานยนต์
-            </p>
-            <Button
-              variant="link"
-              onClick={() => setShowAddForm(true)}
-              className="text-primary font-bold"
-            >
-              เพิ่มคันแรกเลยตอนนี้
-            </Button>
+            <div className="space-y-3">
+              <p className="text-sm font-bold opacity-30 uppercase tracking-[0.25em]">ยังไม่มีข้อมูลรถจักรยานยนต์ของคุณ</p>
+              <Button
+                variant="link"
+                className="text-primary font-black uppercase tracking-[0.2em] text-[10px]"
+                onClick={() => setShowAddForm(true)}
+              >
+                ลงทะเบียนรถคันแรกเลย
+              </Button>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {motorcycles.map((m) => (
-              <div
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-12">
+            {motorcycles.map((m: Motorcycle) => (
+              <Card
                 key={m.id}
-                className="card bg-card border border-border/40 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden group rounded-[2.5rem]"
+                className="group border-none shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden rounded-4xl bg-card animate-in fade-in slide-in-from-bottom-4"
               >
-                <figure className="relative h-48 overflow-hidden bg-muted">
+                <div className="relative h-60 overflow-hidden bg-muted/30">
                   {m.image_url ? (
                     <img
                       src={m.image_url}
@@ -272,53 +359,59 @@ export default function MotorcyclesPage() {
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                     />
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground/40 bg-linear-to-br from-muted/50 to-muted group-hover:bg-primary/5 transition-colors">
-                      <Bike className="w-16 h-16 mb-2" />
-                      <span className="text-[10px] font-black uppercase tracking-widest">
-                        No Photos attached
-                      </span>
+                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground/30">
+                      <Bike className="w-16 h-16" strokeWidth={1.5} />
+                      <span className="text-[8px] font-bold uppercase tracking-[0.4em] mt-4 opacity-50">ไม่มีข้อมูลรูปภาพ</span>
                     </div>
                   )}
+                  <div className="absolute inset-0 bg-linear-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="absolute top-4 right-4 flex gap-2">
+                    <Button
+                      type="button"
+                      size="icon"
+                      className="h-9 w-9 rounded-xl shadow-lg bg-white/90 hover:bg-white text-primary opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all duration-300"
+                      onClick={() => handleEditClick(m)}
+                    >
+                      <Camera className="w-4 h-4" />
+                    </Button>
                     <Button
                       variant="destructive"
                       size="icon"
-                      className="h-9 w-9 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100"
-                      onClick={() => handleDelete(m.id)}
+                      className="h-9 w-9 rounded-xl shadow-lg opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all duration-300"
+                      onClick={() => setDeleteId(m.id)}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
-                </figure>
-                <div className="card-body p-7">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h2 className="card-title text-xl font-black text-foreground">
+                </div>
+                <CardContent className="p-8">
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <h4 className="text-xl font-black tracking-tight leading-tight uppercase line-clamp-1">
                         {m.brand} {m.model}
-                      </h2>
-                      <div className="badge badge-primary badge-outline font-black text-[10px] mt-2 uppercase tracking-widest py-3">
+                      </h4>
+                      <Badge
+                        variant="secondary"
+                        className="bg-primary/5 text-primary border-none rounded-lg px-2 py-0.5 text-[10px] font-black tracking-widest uppercase"
+                      >
                         {m.license_plate}
+                      </Badge>
+                    </div>
+
+                    <Separator className="opacity-40" />
+
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-[0.2em]">ปีที่จดทะเบียน</p>
+                        <p className="text-sm font-black">{m.year || "ไม่ระบุ"}</p>
+                      </div>
+                      <div className="w-10 h-10 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground/20 group-hover:text-primary transition-colors">
+                        <Bike className="w-5 h-5" />
                       </div>
                     </div>
                   </div>
-
-                  <div className="divider opacity-10 my-1" />
-
-                  <div className="flex justify-between items-center text-xs">
-                    <div className="flex flex-col">
-                      <span className="text-muted-foreground font-bold uppercase tracking-tighter text-[9px]">
-                        Registered Year
-                      </span>
-                      <span className="font-black text-foreground text-sm">
-                        {m.year || "N/A"}
-                      </span>
-                    </div>
-                    <div className="w-10 h-10 rounded-full bg-primary/5 flex items-center justify-center">
-                      <Bike className="w-5 h-5 text-primary opacity-40" />
-                    </div>
-                  </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}

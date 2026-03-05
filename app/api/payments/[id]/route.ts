@@ -3,12 +3,28 @@ import { prisma } from "@/lib/prisma";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    const cookieStore = await cookies();
+    const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll() {},
+      },
+    });
+
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+
+    // ONLY Staff/Admin can mark a payment as "success" (e.g., verifying a slip)
+    if (!authUser || (authUser.user_metadata?.role !== "staff" && authUser.user_metadata?.role !== "admin")) {
+      return NextResponse.json({ message: "Forbidden: Staff access required" }, { status: 403 });
+    }
+
     const { status } = await request.json();
 
     if (status !== "success") {
@@ -30,17 +46,11 @@ export async function PATCH(
     });
 
     if (!payment) {
-      return NextResponse.json(
-        { message: "Payment not found" },
-        { status: 404 },
-      );
+      return NextResponse.json({ message: "Payment not found" }, { status: 404 });
     }
 
     if (payment.status === "success") {
-      return NextResponse.json(
-        { message: "Payment already processed" },
-        { status: 400 },
-      );
+      return NextResponse.json({ message: "Payment already processed" }, { status: 400 });
     }
 
     // 2. Update Payment & Handle Loyalty Points in Transaction
@@ -86,6 +96,16 @@ export async function PATCH(
             points: pointsEarned,
           },
         });
+
+        // Notify Customer (sync UX)
+        await tx.notification.create({
+          data: {
+            user_id: payment.repair_job.booking.customer.user_id,
+            title: "ได้รับแต้มสะสมใหม่!",
+            message: `ยินดีด้วย! คุณได้รับ ${pointsEarned} แต้มจากการใช้บริการครั้งล่าสุด`,
+            type: "SUCCESS",
+          },
+        });
       }
 
       return updatedPayment;
@@ -94,9 +114,6 @@ export async function PATCH(
     return NextResponse.json(result);
   } catch (error) {
     console.error("Payment Update Error:", error);
-    return NextResponse.json(
-      { message: "Internal Server Error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
   }
 }

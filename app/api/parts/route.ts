@@ -4,9 +4,33 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { partSchema } from "@/lib/validations";
 
-// GET /api/parts - ค้นหาอะไหล่
+async function getStaffUser() {
+  const cookieStore = await cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll() {},
+      },
+    },
+  );
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+}
+
+// GET /api/parts - ค้นหาอะไหล่ (auth check)
 export async function GET(request: Request) {
   try {
+    const user = await getStaffUser();
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || "";
 
@@ -17,7 +41,7 @@ export async function GET(request: Request) {
           { description: { contains: search, mode: "insensitive" } },
         ],
       },
-      orderBy: { created_at: "desc" },
+      orderBy: { name: "asc" },
     });
 
     return NextResponse.json(parts);
@@ -29,9 +53,18 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/parts - เพิ่มอะไหล่ใหม่
+// POST /api/parts - เพิ่มอะไหล่ใหม่ (Staff/Admin only)
 export async function POST(request: Request) {
   try {
+    const user = await getStaffUser();
+    if (!user)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+    const role = user.user_metadata?.role;
+    if (role !== "staff" && role !== "admin") {
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
+
     const body = await request.json();
     const parsed = partSchema.safeParse(body);
 
@@ -42,10 +75,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const { name, description, price, stock_qty } = parsed.data;
+    const part = await prisma.$transaction(async (tx) => {
+      const p = await tx.part.create({
+        data: parsed.data,
+      });
 
-    const part = await prisma.part.create({
-      data: parsed.data,
+      // Log initial stock
+      await tx.partInventoryLog.create({
+        data: {
+          part_id: p.id,
+          staff_id: user.id,
+          change_qty: p.stock_qty,
+          balance_after: p.stock_qty,
+          type: "RESTOCK",
+          note: "นำเข้าสินค้าใหม่ครั้งแรก",
+        },
+      });
+      return p;
     });
 
     return NextResponse.json(part, { status: 201 });

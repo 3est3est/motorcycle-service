@@ -18,6 +18,7 @@ export async function POST(
           getAll() {
             return cookieStore.getAll();
           },
+          setAll() {},
         },
       },
     );
@@ -25,16 +26,16 @@ export async function POST(
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
     if (!user) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // Get Repair Job
+    // Get Repair Job + all its parts
     const repair = await prisma.repairJob.findUnique({
       where: { id },
       include: {
         booking: true,
+        repair_parts: true, // Need this to restore stock
       },
     });
 
@@ -46,12 +47,11 @@ export async function POST(
     const customer = await prisma.customer.findUnique({
       where: { user_id: user.id },
     });
-
     if (!customer || repair.booking.customer_id !== customer.id) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
 
-    // Logic: Only cancel if not started (status = created)
+    // Only cancel if not started
     if (repair.status !== "created") {
       return NextResponse.json(
         {
@@ -62,22 +62,53 @@ export async function POST(
       );
     }
 
-    // Update both using transaction
-    const [updated] = await prisma.$transaction([
-      prisma.repairJob.update({
+    // Run everything in a transaction:
+    // 1. Restore stock for any parts that were added
+    // 2. Log inventory changes
+    // 3. Delete all repair_parts records
+    // 4. Cancel the repair job & booking
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Cancel repair job
+      const updated = await tx.repairJob.update({
         where: { id },
         data: {
           status: "cancelled",
           note: `Cancelled by customer at ${new Date().toLocaleString("th-TH")}`,
         },
-      }),
-      prisma.booking.update({
+      });
+
+      // 2. Cancel booking
+      await tx.booking.update({
         where: { id: repair.booking_id },
         data: { status: "cancelled" },
-      }),
-    ]);
+      });
 
-    return NextResponse.json(updated);
+      // 3. Restore stock and Log
+      for (const rp of repair.repair_parts) {
+        const p = await tx.part.update({
+          where: { id: rp.part_id },
+          data: { stock_qty: { increment: rp.quantity } },
+        });
+
+        await tx.partInventoryLog.create({
+          data: {
+            part_id: rp.part_id,
+            repair_job_id: id,
+            change_qty: rp.quantity,
+            balance_after: p.stock_qty,
+            type: "REPAIR_RETURN",
+            note: `ลูกค้ายกเลิกงานซ่อม ID: ${id.slice(-6).toUpperCase()}`,
+          },
+        });
+      }
+
+      // 4. Delete repair parts
+      await tx.repairPart.deleteMany({ where: { repair_job_id: id } });
+
+      return updated;
+    });
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Customer Repair Cancellation Error:", error);
     return NextResponse.json(

@@ -7,24 +7,19 @@ import { cookies } from "next/headers";
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll() {},
+    const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
         },
+        setAll() {},
       },
-    );
+    });
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user)
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const { points_to_redeem, description } = await request.json();
 
@@ -38,17 +33,11 @@ export async function POST(request: Request) {
     });
 
     if (!customer || !customer.loyalty_points) {
-      return NextResponse.json(
-        { message: "Loyalty account not found" },
-        { status: 404 },
-      );
+      return NextResponse.json({ message: "Loyalty account not found" }, { status: 404 });
     }
 
     if (customer.loyalty_points.total_points < points_to_redeem) {
-      return NextResponse.json(
-        { message: "คะแนนสะสมไม่เพียงพอ" },
-        { status: 400 },
-      );
+      return NextResponse.json({ message: "คะแนนสะสมไม่เพียงพอ" }, { status: 400 });
     }
 
     // Process Redemption in Transaction
@@ -70,15 +59,22 @@ export async function POST(request: Request) {
         },
       });
 
+      // 3. Notify Customer
+      await tx.notification.create({
+        data: {
+          user_id: user.id,
+          title: "แลกสิทธิ์รับรางวัลสำเร็จ!",
+          message: `คุณได้ใช้ ${points_to_redeem} แต้มเพื่อแลก: ${description || "ของรางวัล"}`,
+          type: "SUCCESS",
+        },
+      });
+
       return { updatedLoyalty, transaction };
     });
 
     return NextResponse.json(result);
   } catch (error) {
     console.error("Redeem Points Error:", error);
-    return NextResponse.json(
-      { message: "Internal Server Error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
   }
 }
