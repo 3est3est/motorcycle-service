@@ -4,8 +4,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
-    const { id } = await params;
     const cookieStore = await cookies();
     const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
       cookies: {
