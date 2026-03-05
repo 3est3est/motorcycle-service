@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, addDays } from "date-fns";
 import { th } from "date-fns/locale";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,6 +29,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface Motorcycle {
   id: string;
@@ -278,80 +280,112 @@ export default function BookingsPage() {
                     )}
                   </div>
 
-                  <div className="space-y-4">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">2. เลือกวันที่</Label>
-                    <div className="flex gap-3 overflow-x-auto pb-4 px-1 snap-x scrollbar-hide">
-                      {availableDates.map((d) => {
-                        const dStr = format(d, "yyyy-MM-dd");
-                        const isSelected = selectedDate === dStr;
-                        return (
-                          <button
-                            key={dStr}
-                            type="button"
-                            onClick={() => setSelectedDate(dStr)}
-                            className={cn(
-                              "shrink-0 w-20 h-24 rounded-2xl flex flex-col items-center justify-center gap-1 border border-white/5 transition-all snap-start active-prime",
-                              isSelected
-                                ? "bg-primary text-primary-foreground border-primary shadow-md scale-105"
-                                : "bg-muted/30 text-muted-foreground hover:bg-muted border-white/10",
-                            )}
-                          >
-                            <span className="text-[9px] font-black uppercase tracking-tighter opacity-70">
-                              {format(d, "EEE", { locale: th })}
-                            </span>
-                            <span className="text-2xl font-black">{format(d, "d")}</span>
-                            <span className="text-[9px] font-bold opacity-70">{format(d, "MMM", { locale: th })}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <div className="space-y-6">
+                    {/* Date and Time Selection */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                        <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">
+                          2. เลือกวันที่ต้องการ
+                        </Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full h-14 justify-start text-left font-bold bg-muted/30 border-none rounded-xl px-4",
+                                !selectedDate && "text-muted-foreground",
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-5 w-5 opacity-40" />
+                              {selectedDate ? (
+                                format(new Date(selectedDate), "EEEEที่ d MMMM yyyy", { locale: th })
+                              ) : (
+                                <span>คลิกเพื่อเลือกวันที่</span>
+                              )}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0 rounded-2xl border shadow-premium overflow-hidden" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={selectedDate ? new Date(selectedDate) : undefined}
+                              onSelect={(date) => {
+                                if (date) {
+                                  setSelectedDate(format(date, "yyyy-MM-dd"));
+                                  setSelectedTime("");
+                                }
+                              }}
+                              disabled={(date) =>
+                                date.getDay() === 0 || date < new Date(new Date().setHours(0, 0, 0, 0)) || date > addDays(new Date(), 30)
+                              }
+                              locale={th}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
 
-                  {selectedDate && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">3. เลือกเวลาว่าง</Label>
-                      <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
-                        {isLoadingAvail ? (
-                          <div className="col-span-full py-8 text-center flex flex-col items-center gap-2">
-                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground/30" />
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase">กำลังตรวจสอบคิวว่าง...</p>
+                      <div className="space-y-4">
+                        <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">
+                          3. เลือกเวลาที่สะดวก
+                        </Label>
+                        {!selectedDate ? (
+                          <div className="h-14 flex items-center px-4 rounded-xl bg-muted/10 border border-dashed border-white/5 opacity-50 text-xs font-medium">
+                            กรุณาเลือกวันที่ก่อนเพื่อดูเวลาที่ว่าง
                           </div>
                         ) : (
-                          slots.map((slot) => {
-                            const isSelected = selectedTime === slot.time;
-                            return (
-                              <button
-                                key={slot.time}
-                                type="button"
-                                disabled={!slot.available}
-                                onClick={() => setSelectedTime(slot.time)}
-                                className={cn(
-                                  "h-16 rounded-xl flex flex-col items-center justify-center border transition-all font-bold active-prime",
-                                  !slot.available && "opacity-20 cursor-not-allowed bg-muted border-none",
-                                  slot.available &&
-                                    !isSelected &&
-                                    "bg-card border-muted-foreground/10 hover:border-primary/50 text-foreground",
-                                  isSelected && "bg-primary text-primary-foreground border-primary shadow-md scale-105",
+                          <Select value={selectedTime} onValueChange={(val) => setSelectedTime(val)}>
+                            <SelectTrigger className="h-14 bg-muted/30 border-none rounded-xl px-4 font-bold">
+                              <SelectValue placeholder="-- เลือกช่วงเวลา --">
+                                {selectedTime ? (
+                                  <div className="flex items-center gap-2">
+                                    <Clock className="w-4 h-4" />
+                                    <span>{selectedTime} น.</span>
+                                  </div>
+                                ) : (
+                                  "เลือกเวลา..."
                                 )}
-                              >
-                                <span className="text-sm font-black tracking-tight">{slot.time}</span>
-                                <span className="text-[8px] uppercase tracking-widest">{slot.available ? "ว่าง" : "เต็ม"}</span>
-                              </button>
-                            );
-                          })
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl border shadow-lg">
+                              {isLoadingAvail ? (
+                                <div className="p-4 text-center">
+                                  <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
+                                  <p className="text-[10px] font-bold uppercase">กำลังโหลด...</p>
+                                </div>
+                              ) : (
+                                slots.map((slot) => (
+                                  <SelectItem key={slot.time} value={slot.time} disabled={!slot.available} className="p-3">
+                                    <div className="flex items-center justify-between w-full gap-4">
+                                      <span className="font-bold">{slot.time} น.</span>
+                                      <span
+                                        className={cn(
+                                          "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full",
+                                          slot.available ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500",
+                                        )}
+                                      >
+                                        {slot.available ? "ว่าง" : "เต็ม"}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
                         )}
                       </div>
                     </div>
-                  )}
 
-                  <div className="space-y-4">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">4. ข้อมูลเพิ่มเติม</Label>
-                    <Textarea
-                      placeholder="อาการเบื้องต้น เช่น สตาร์ทไม่ติด, มีเสียงดังที่เครื่อง, หรือสิ่งที่ต้องการให้ช่างตรวจสอบ..."
-                      className="min-h-[140px] bg-muted/30 border-none rounded-xl p-5 text-sm font-medium focus-visible:ring-primary/40"
-                      value={form.symptom_note || ""}
-                      onChange={(e) => setForm({ ...form, symptom_note: e.target.value })}
-                    />
+                    <div className="space-y-4">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">
+                        4. ข้อมูลเพิ่มเติม
+                      </Label>
+                      <Textarea
+                        placeholder="อาการเบื้องต้น เช่น สตาร์ทไม่ติด, มีเสียงดังที่เครื่อง..."
+                        className="min-h-[120px] bg-muted/30 border-none rounded-xl p-5 text-sm font-medium focus-visible:ring-primary/40"
+                        value={form.symptom_note || ""}
+                        onChange={(e) => setForm({ ...form, symptom_note: e.target.value })}
+                      />
+                    </div>
                   </div>
 
                   {serverError && (
